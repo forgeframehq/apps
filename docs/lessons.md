@@ -66,3 +66,12 @@ Newest first. One entry per thing that cost real time. Say what happened, why, a
 - **Real data finds what seed data cannot:** 153-rep typos, a workout left running for 4 hours, one-off workout names, timed sets with no reps. Test with a real export (kept outside the repo), then write a made-up CSV for the automated test.
 - **A new native module** (`expo-document-picker`) means `npm install` at the version in `node_modules/expo/bundledNativeModules.json` and committing `package-lock.json`, because CI runs `npm ci`.
 - **Puppeteer and uppercase:** `Caption` upper-cases its text, so match rendered text case-insensitively.
+
+## 2026-11-23 — Reps 1.3: closing the import gaps
+
+- **Assisted lifts:** score them as body weight minus the help (`loadOf` in `store.ts`), so every record, trend and target rule works unchanged. Without a logged body weight they stay unscored. Leave them out of volume, which is what Hevy does and what the user's totals were compared against.
+- **Borrow pictures, never history.** A custom exercise shows the photos of a library exercise with the same movement words and main muscle (`lookalike` in `names.ts`), and says so. Its history stays its own.
+- **Compare totals with the app the data came from.** Volume was 2,230 lb higher than Hevy's for one workout; the difference was exactly the assisted sets.
+- **Default workout names** ("Evening workout") repeat, so "used twice" is not enough to call something a routine.
+- **A deploy workflow should pass when its secrets are missing** and say what to add, so pushing it never turns the repo red.
+- **Test helper:** `type()` only replaces text in fields with `selectTextOnFocus`; elsewhere it appends.

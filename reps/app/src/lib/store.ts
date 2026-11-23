@@ -8,6 +8,7 @@ import LIBRARY from '@/data/exercises.json';
 import { FRAMES, THUMBS } from '@/data/images';
 
 import { fromKg, isoNow, newId, toKg } from './format';
+import { guess, lookalike } from './names';
 import { readJson, removeJson, writeJson } from './storage';
 import type { ActiveExercise, ActiveSet, ActiveWorkout, Checkin, Exercise, Link, LoggedSet, Measure, PrKind, Routine, Settings, Tombstone, Unit, Workout } from './types';
 
@@ -28,10 +29,19 @@ export const db = {
 
 export const library = LIBRARY as Exercise[];
 const byId = new Map<string, Exercise>();
+const donors = new Map<string, string>(); // custom exercise id -> library exercise whose photos it borrows ('' = none)
 function reindex() {
   byId.clear();
+  donors.clear();
   for (const e of library) byId.set(e.id, e);
   for (const e of db.customExercises) byId.set(e.id, e);
+}
+/** The library exercise a custom one borrows its pictures from, if any looks enough like it. */
+export function pictureFrom(id: string): Exercise | undefined {
+  const e = byId.get(id);
+  if (!e?.custom) return undefined;
+  if (!donors.has(id)) donors.set(id, lookalike(e, library)?.id ?? '');
+  return byId.get(donors.get(id) ?? '');
 }
 reindex();
 
@@ -89,6 +99,8 @@ export async function load() {
   }
   db.active = (await readJson<ActiveWorkout>('active')) ?? null;
   applyAccent(db.settings.accent);
+  // Imported exercises whose muscle could not be guessed get another go whenever the rules improve.
+  for (const e of db.customExercises) if (e.muscle_group === 'other' && e.id.startsWith('hv')) Object.assign(e, guess(e.name));
   reindex();
   refreshNames();
   db.ready = true;
@@ -107,8 +119,8 @@ function refreshNames() {
 
 export const exercise = (id: string): Exercise | undefined => byId.get(id);
 export const allExercises = (): Exercise[] => [...db.customExercises, ...library];
-export const thumb = (id: string): number | undefined => EXERCISE_ART[id] ?? THUMBS[id];
-export const frames = (id: string): number[] => FRAMES[id] ?? [];
+export const thumb = (id: string): number | undefined => EXERCISE_ART[id] ?? THUMBS[id] ?? THUMBS[pictureFrom(id)?.id ?? ''];
+export const frames = (id: string): number[] => FRAMES[id] ?? FRAMES[pictureFrom(id)?.id ?? ''] ?? [];
 const distinct = (pick: (e: Exercise) => string) => [...new Set(allExercises().map(pick))].sort();
 export const muscles = () => distinct((e) => e.muscle_group);
 export const equipmentTypes = () => distinct((e) => e.equipment);
@@ -118,6 +130,17 @@ export function createExercise(name: string, muscle_group: string, equipment: st
   db.customExercises.push(e);
   commit();
   return e;
+}
+
+export function updateExercise(id: string, patch: Pick<Exercise, 'name' | 'muscle_group' | 'equipment' | 'secondary'>) {
+  const e = db.customExercises.find((x) => x.id === id);
+  if (!e) return;
+  Object.assign(e, patch, { name: patch.name.trim() || e.name });
+  reindex();
+  refreshNames();
+  recomputeRecords(); // the name decides whether it is an assisted lift
+  for (const w of db.workouts) if (w.exercises.some((x) => x.exercise_id === id)) w.dirty = true;
+  commit();
 }
 
 // ---------- settings ----------
@@ -148,12 +171,26 @@ export function resetRecords(exId: string, on = true) {
 export const recordReset = (exId: string) => db.settings.record_resets?.[exId] ?? '';
 /** Assisted lifts log the help, not the load, so more weight is not progress. They are left out of records and targets. */
 export const isAssisted = (exId: string) => /assisted/i.test(byId.get(exId)?.name ?? '');
+/** Latest logged body weight, or 0 if none. */
+export const bodyKg = () => db.measures.find((m) => m.weight_kg)?.weight_kg ?? 0;
+/** Whether an exercise can be scored: assisted lifts need a body weight to turn "help" into "load". */
+export const scored = (exId: string) => !isAssisted(exId) || bodyKg() > 0;
+/**
+ * Turns a logged weight into the load actually lifted. For assisted lifts that is body weight minus the help,
+ * so taking help off counts as progress like adding weight does anywhere else.
+ */
+export function loadOf(exId: string): (kg: number) => number {
+  if (!isAssisted(exId)) return (kg) => kg;
+  const body = bodyKg();
+  return (kg) => (body > 0 ? Math.max(0, body - kg) : 0);
+}
 
 // ---------- body measurements ----------
 
 export function saveMeasure(m: Omit<Measure, 'id'> & { id?: string }) {
   const item: Measure = { ...m, id: m.id || newId() };
   db.measures = [item, ...db.measures.filter((x) => x.id !== item.id)].sort((a, b) => (a.date < b.date ? 1 : -1));
+  recomputeRecords();
   commit();
 }
 export function deleteMeasure(id: string) {
@@ -227,7 +264,8 @@ export function deleteWorkout(id: string) {
   commit();
 }
 const allSets = (w: Workout) => w.exercises.flatMap((e) => e.sets);
-export const workoutVolumeKg = (w: Workout) => allSets(w).reduce((a, s) => a + s.weight_kg * s.reps, 0);
+/** Total weight moved. Assisted lifts are left out: their number is help, not load. */
+export const workoutVolumeKg = (w: Workout) => w.exercises.reduce((a, e) => (isAssisted(e.exercise_id) ? a : a + e.sets.reduce((x, s) => x + s.weight_kg * s.reps, 0)), 0);
 export const workoutSetCount = (w: Workout) => allSets(w).length;
 export const workoutReps = (w: Workout) => allSets(w).reduce((a, s) => a + s.reps, 0);
 export const workoutMinutes = (w: Workout) => Math.round((Date.parse(w.ended_at) - Date.parse(w.started_at)) / 60000);
@@ -257,28 +295,32 @@ export interface Records {
   best_session_volume_kg: number;
   set_records: { reps: number; kg: number }[];
   series: { t: number; heaviest: number; one: number; best_set: number; volume: number }[];
+  assisted?: boolean; // weights below are loads lifted (body weight minus help), not what was typed
 }
 /** Personal records and the progress series for one exercise. */
 export function records(exId: string, skipWorkoutId = ''): Records {
   const r: Records = { sessions: 0, heaviest_kg: 0, best_1rm_kg: 0, best_set_kg: 0, best_set_reps: 0, best_set_volume_kg: 0, best_session_volume_kg: 0, set_records: [], series: [] };
   const byReps = new Map<number, number>();
   const reset = recordReset(exId);
+  const load = loadOf(exId);
+  r.assisted = isAssisted(exId);
   for (const item of sessions(exId, skipWorkoutId).reverse()) { // oldest first, so the series reads left to right
     let heaviest = 0, one = 0, bestSet = 0, volume = 0;
     const counts = !reset || item.workout.started_at >= reset; // sessions before a reset stay on the chart but hold no records
     for (const s of item.sets) {
-      volume += s.weight_kg * s.reps;
+      const kg = load(s.weight_kg);
+      volume += kg * s.reps;
       if (s.set_type === 'warmup' || s.reps <= 0) continue;
-      heaviest = Math.max(heaviest, s.weight_kg);
-      one = Math.max(one, e1rm(s.weight_kg, s.reps));
-      bestSet = Math.max(bestSet, s.weight_kg * s.reps);
+      heaviest = Math.max(heaviest, kg);
+      one = Math.max(one, e1rm(kg, s.reps));
+      bestSet = Math.max(bestSet, kg * s.reps);
       if (!counts) continue;
-      if (s.weight_kg * s.reps > r.best_set_volume_kg) {
-        r.best_set_volume_kg = s.weight_kg * s.reps;
-        r.best_set_kg = s.weight_kg;
+      if (kg * s.reps > r.best_set_volume_kg) {
+        r.best_set_volume_kg = kg * s.reps;
+        r.best_set_kg = kg;
         r.best_set_reps = s.reps;
       }
-      if (s.weight_kg > 0 && s.weight_kg > (byReps.get(s.reps) ?? 0)) byReps.set(s.reps, s.weight_kg);
+      if (kg > 0 && kg > (byReps.get(s.reps) ?? 0)) byReps.set(s.reps, kg);
     }
     if (counts) {
       r.sessions++;
@@ -296,17 +338,18 @@ export function records(exId: string, skipWorkoutId = ''): Records {
 export function markRecords(w: Workout) {
   for (const s of allSets(w)) s.prs = [];
   for (const exId of new Set(w.exercises.map((e) => e.exercise_id))) {
-    if (isAssisted(exId)) continue;
+    if (!scored(exId)) continue;
     const prior = records(exId, w.id);
     if (!prior.sessions) continue;
-    const mine = w.exercises.filter((e) => e.exercise_id === exId).flatMap((e) => e.sets).filter((s) => s.set_type !== 'warmup' && s.reps > 0 && s.weight_kg > 0);
+    const load = loadOf(exId);
+    const mine = w.exercises.filter((e) => e.exercise_id === exId).flatMap((e) => e.sets).filter((s) => s.set_type !== 'warmup' && s.reps > 0 && load(s.weight_kg) > 0);
     const check = (kind: PrKind, best: number, value: (s: LoggedSet) => number) => {
       const top = mine.reduce<LoggedSet | null>((a, s) => (!a || value(s) > value(a) ? s : a), null);
       if (top && value(top) > best + 1e-6) top.prs.push(kind);
     };
-    check('weight', prior.heaviest_kg, (s) => s.weight_kg);
-    check('1rm', prior.best_1rm_kg, (s) => e1rm(s.weight_kg, s.reps));
-    check('volume', prior.best_set_volume_kg, (s) => s.weight_kg * s.reps);
+    check('weight', prior.heaviest_kg, (s) => load(s.weight_kg));
+    check('1rm', prior.best_1rm_kg, (s) => e1rm(load(s.weight_kg), s.reps));
+    check('volume', prior.best_set_volume_kg, (s) => load(s.weight_kg) * s.reps);
   }
 }
 
@@ -319,20 +362,22 @@ export function recomputeRecords() {
     const before = JSON.stringify(allSets(w).map((s) => s.prs ?? []));
     for (const s of allSets(w)) s.prs = [];
     for (const exId of new Set(w.exercises.map((e) => e.exercise_id))) {
-      if (isAssisted(exId)) continue;
+      if (!scored(exId)) continue;
+      const load = loadOf(exId);
       const key = resets[exId] && w.started_at >= resets[exId] ? `${exId}|after` : exId;
       if (resets[exId] && w.started_at < resets[exId]) continue;
-      const mine = w.exercises.filter((e) => e.exercise_id === exId).flatMap((e) => e.sets).filter((s) => s.set_type !== 'warmup' && s.reps > 0 && s.weight_kg > 0);
+      const mine = w.exercises.filter((e) => e.exercise_id === exId).flatMap((e) => e.sets).filter((s) => s.set_type !== 'warmup' && s.reps > 0 && load(s.weight_kg) > 0);
       if (!mine.length) continue;
       const prior = best.get(key);
+      const W = (s: LoggedSet) => load(s.weight_kg), O = (s: LoggedSet) => e1rm(load(s.weight_kg), s.reps), V = (s: LoggedSet) => load(s.weight_kg) * s.reps;
       const top = (value: (s: LoggedSet) => number) => mine.reduce((a, s) => (value(s) > value(a) ? s : a), mine[0]);
-      const tw = top((s) => s.weight_kg), t1 = top((s) => e1rm(s.weight_kg, s.reps)), tv = top((s) => s.weight_kg * s.reps);
+      const tw = top(W), t1 = top(O), tv = top(V);
       if (prior) {
-        if (tw.weight_kg > prior.w + 1e-6) tw.prs.push('weight');
-        if (e1rm(t1.weight_kg, t1.reps) > prior.one + 1e-6) t1.prs.push('1rm');
-        if (tv.weight_kg * tv.reps > prior.vol + 1e-6) tv.prs.push('volume');
+        if (W(tw) > prior.w + 1e-6) tw.prs.push('weight');
+        if (O(t1) > prior.one + 1e-6) t1.prs.push('1rm');
+        if (V(tv) > prior.vol + 1e-6) tv.prs.push('volume');
       }
-      best.set(key, { w: Math.max(prior?.w ?? 0, tw.weight_kg), one: Math.max(prior?.one ?? 0, e1rm(t1.weight_kg, t1.reps)), vol: Math.max(prior?.vol ?? 0, tv.weight_kg * tv.reps) });
+      best.set(key, { w: Math.max(prior?.w ?? 0, W(tw)), one: Math.max(prior?.one ?? 0, O(t1)), vol: Math.max(prior?.vol ?? 0, V(tv)) });
     }
     if (before !== JSON.stringify(allSets(w).map((s) => s.prs))) w.dirty = true;
   }

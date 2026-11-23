@@ -2,7 +2,7 @@
   "expo": {
     "name": "Reps",
     "slug": "reps",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "reps",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.forgeframe.reps",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "backgroundColor": "#0B0B0C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

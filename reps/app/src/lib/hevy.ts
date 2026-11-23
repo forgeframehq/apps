@@ -1,6 +1,7 @@
 // Imports the CSV files Hevy exports (workout_data.csv and measurement_data.csv). Runs on the phone.
 // Exercises that match the Reps library by name are linked to it; the rest come in as custom exercises under your own names.
 import { KG_PER_LB } from './format';
+import { guess, words } from './names';
 import { allExercises, commit, db, recomputeRecords } from './store';
 import type { Exercise, LoggedExercise, LoggedSet, Measure, SetType, Workout } from './types';
 
@@ -44,38 +45,6 @@ function stableId(text: string): string {
   let a = 0x811c9dc5, b = 0x1b873593;
   for (let i = 0; i < text.length; i++) { a = Math.imul(a ^ text.charCodeAt(i), 16777619) >>> 0; b = Math.imul(b + text.charCodeAt(i), 2246822519) >>> 0; }
   return ('hv' + a.toString(36) + b.toString(36) + text.length.toString(36)).padEnd(20, '0').slice(0, 20);
-}
-
-// Words that mean the same thing, so "Tricep Extension" and "Triceps Extension" compare equal.
-const SAME: Record<string, string> = { bicep: 'biceps', tricep: 'triceps', raises: 'raise', curls: 'curl', rows: 'row', dips: 'dip', squats: 'squat', lunges: 'lunge', extensions: 'extension', shrugs: 'shrug', crunches: 'crunch', deadlifts: 'deadlift', flyes: 'fly', flys: 'fly', pullup: 'pull up', chinup: 'chin up', pushup: 'push up' };
-const words = (name: string) => [...new Set(name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').flatMap((t) => (SAME[t] ?? t).split(' ')))].sort().join(' ');
-
-/** Best guess at the main muscle from the name, for exercises the library does not have. First match wins. */
-const MUSCLE_RULES: [RegExp, string, string[]][] = [
-  [/calf/, 'calves', []],
-  [/glute|hip thrust/, 'glutes', ['hamstrings']],
-  [/abduct/, 'abductors', []], [/adduct/, 'adductors', []],
-  [/tricep|pushdown|skull|\bdip|jm press/, 'triceps', []],
-  [/leg curl|hamstring/, 'hamstrings', []],
-  [/wrist|forearm/, 'forearms', []],
-  [/curl/, 'biceps', ['forearms']],
-  [/pulldown|pull up|chin up|pullover|\blat\b/, 'lats', ['biceps']],
-  [/shrug/, 'traps', []],
-  [/face pull|rear delt|reverse fly|lateral|delt|shoulder|overhead press|lu raise|front raise/, 'shoulders', []],
-  [/\brow\b/, 'middle back', ['biceps', 'lats']],
-  [/chest|bench|butterfly|pec|\bfly\b|push up|press around/, 'chest', ['triceps', 'shoulders']],
-  [/deadlift|rdl|good morning|pull through/, 'hamstrings', ['glutes', 'lower back']],
-  [/squat|leg press|lunge|leg extension|step up|\bextensions?\b/, 'quadriceps', ['glutes']],
-  [/\babs?\b|crunch|sit ?up|plank|knee raise|leg raise|twist/, 'abdominals', []],
-  [/raise/, 'shoulders', []],
-  [/press/, 'shoulders', ['triceps']],
-];
-const EQUIPMENT: [RegExp, string][] = [[/smith|machine|assisted|plate/, 'machine'], [/cable|rope|pulldown|pushdown/, 'cable'], [/dumbbell/, 'dumbbell'], [/ez bar/, 'ez bar'], [/barbell|\bbar\b/, 'barbell'], [/kettle/, 'kettlebell'], [/band/, 'band']];
-
-function guess(name: string): Pick<Exercise, 'muscle_group' | 'secondary' | 'equipment'> {
-  const n = name.toLowerCase().replace(/[^a-z0-9]+/g, ' ');
-  const m = MUSCLE_RULES.find(([re]) => re.test(n));
-  return { muscle_group: m?.[1] ?? 'other', secondary: m?.[2] ?? [], equipment: EQUIPMENT.find(([re]) => re.test(n))?.[1] ?? 'other' };
 }
 
 const TYPES: Record<string, SetType> = { normal: 'normal', warmup: 'warmup', failure: 'failure', dropset: 'drop', drop: 'drop' };
@@ -151,7 +120,7 @@ function importWorkouts(rows: Record<string, string>[]): ImportResult {
   const names = new Set<string>();
   for (const w of fresh.sort((a, b) => (a.started_at < b.started_at ? 1 : -1))) {
     // One-off sessions ("Evening workout") are not routines: the name has to have been used at least twice.
-    if (w.started_at < cutoff || names.has(w.name) || db.routines.some((r) => r.name === w.name) || db.workouts.filter((x) => x.name === w.name).length < 2) continue;
+    if (w.started_at < cutoff || names.has(w.name) || db.routines.some((r) => r.name === w.name) || db.workouts.filter((x) => x.name === w.name).length < 2 || /^(morning|midday|lunch|afternoon|evening|night)\b.*workout/i.test(w.name)) continue; // the last one is Hevy's default name for an unplanned session
     names.add(w.name);
     const rid = stableId('routine|' + w.name);
     db.routines.push({
@@ -192,6 +161,7 @@ function importMeasures(rows: Record<string, string>[]): ImportResult {
     if (m.weight_kg || m.fat_percent || Object.keys(m.parts!).length) { db.measures.push(m); added++; } else skipped++;
   }
   db.measures.sort((a, b) => (a.date < b.date ? 1 : -1));
+  recomputeRecords(); // body weight is what lets assisted lifts be scored
   commit();
   return { kind: 'measures', added, skipped, matched: 0, custom: 0, routines: 0 };
 }

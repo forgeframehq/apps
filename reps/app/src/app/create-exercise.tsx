@@ -4,7 +4,7 @@ import { View } from 'react-native';
 
 import { cap } from '@/lib/format';
 import { deliverPick } from '@/lib/pick';
-import { allExercises, createExercise } from '@/lib/store';
+import { allExercises, createExercise, exercise, updateExercise } from '@/lib/store';
 import { Btn, C, Divider, Field, Icon, Page, Row, TapCard, Txt } from '@/ui/kit';
 import { alertBox, pick, pickMany } from '@/ui/overlay';
 
@@ -14,18 +14,20 @@ const EQUIPMENT = ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'ket
 /** Add your own exercise to the library. */
 export default function CreateExercise() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ name?: string; pick?: string }>();
-  const [name, setName] = useState(params.name ?? '');
-  const [equipment, setEquipment] = useState('');
-  const [muscle, setMuscle] = useState('');
-  const [others, setOthers] = useState<string[]>([]);
+  const params = useLocalSearchParams<{ name?: string; pick?: string; edit?: string }>();
+  const editing = params.edit ? exercise(params.edit) : undefined; // only custom exercises can be edited
+  const [name, setName] = useState(editing?.name ?? params.name ?? '');
+  const [equipment, setEquipment] = useState(editing?.equipment ?? '');
+  const [muscle, setMuscle] = useState(editing?.muscle_group ?? '');
+  const [others, setOthers] = useState<string[]>(editing?.secondary ?? []);
 
   const save = () => {
     const n = name.trim();
     if (!n) return alertBox('Name your exercise', 'Give it a name so you can find it later.');
-    const clash = allExercises().find((e) => e.name.toLowerCase() === n.toLowerCase());
+    const clash = allExercises().find((e) => e.name.toLowerCase() === n.toLowerCase() && e.id !== editing?.id);
     if (clash) return alertBox('Already in your library', `There is already an exercise called "${clash.name}".`);
     if (!muscle) return alertBox('Pick a muscle group', 'Choose the main muscle this exercise works, so it counts in your statistics.');
+    if (editing) { updateExercise(editing.id, { name: n, muscle_group: muscle, equipment: equipment || 'other', secondary: others }); return router.back(); }
     const e = createExercise(n, muscle, equipment || 'other', others);
     if (params.pick) {
       router.dismiss(2); // close this screen and the picker, then hand the new exercise to whoever asked
@@ -48,7 +50,7 @@ export default function CreateExercise() {
 
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <Stack.Screen options={{ headerRight: () => <Btn title="Save" height={38} onPress={save} /> }} />
+      <Stack.Screen options={{ title: editing ? 'Edit Exercise' : 'Create Exercise', headerRight: () => <Btn title="Save" height={38} onPress={save} /> }} />
       <Page gap={6}>
         <Field value={name} onChangeText={setName} placeholder="Exercise Name" accessibilityLabel="Exercise name" style={{ fontSize: 20 }} />
         <Row style={{ height: 6 }}><View /></Row>

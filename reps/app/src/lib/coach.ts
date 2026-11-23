@@ -1,7 +1,7 @@
 // The built-in coach. Everything here is worked out on the phone from your own history: no AI, no network.
 // It reviews the last session, suggests targets for the next one, and watches consistency and balance.
 import { cap, fmtDate, fmtMinutes, fmtVolume, fmtWeight, fromKg, MONTH_NAMES, plural, trimNum } from './format';
-import { db, e1rm, exercise, isAssisted, records, routine, sessions, setCoachHint, unit, weekly, workoutMinutes, workoutRecords, workoutVolumeKg } from './store';
+import { db, e1rm, exercise, isAssisted, loadOf, records, scored, routine, sessions, setCoachHint, unit, weekly, workoutMinutes, workoutRecords, workoutVolumeKg } from './store';
 import type { LoggedSet, Routine, Workout } from './types';
 
 export const FEEL = ['Rough', 'Hard', 'OK', 'Good', 'Great'];
@@ -32,11 +32,21 @@ export interface Suggestion { last: string; next: string; why: string }
  * Uses the heaviest weight from the last session and holds back if that session was a grind.
  */
 export function suggest(exId: string, targetReps: string): Suggestion | null {
-  if (isAssisted(exId)) return null;
   const lastSession = sessions(exId)[0];
   const sets = lastSession ? working(lastSession.sets) : [];
   if (!sets.length) return null;
   const u = unit();
+  if (isAssisted(exId)) {
+    // Progress here means the same reps with less help.
+    const help = Math.min(...sets.map((s) => s.weight_kg));
+    const hardest = sets.filter((s) => s.weight_kg === help).map((s) => s.reps);
+    const r = repRange(targetReps) ?? { low: Math.min(...hardest), high: Math.min(...hardest) + 2 };
+    const span = r.low === r.high ? String(r.low) : `${r.low}-${r.high}`;
+    const h = fromKg(help, u);
+    const last = sets.map((s) => `${fmtWeight(s.weight_kg, u)}x${s.reps}`).join(', ');
+    if (h > 0 && hardest.every((x) => x >= r.high)) return { last, next: `${trimNum(Math.max(0, h - step(exId)))} ${u} help x ${span}`, why: `Every set hit ${r.high}, so take some help off.` };
+    return { last, next: `${trimNum(h)} ${u} help, add a rep`, why: `Work up to ${r.high} on every set, then take help off.` };
+  }
   const topKg = Math.max(...sets.map((s) => s.weight_kg));
   const top = sets.filter((s) => s.weight_kg === topKg);
   const w = fromKg(topKg, u);
@@ -62,17 +72,20 @@ export function review(w: Workout) {
   const older = db.workouts.slice(db.workouts.indexOf(w) + 1);
   const prev = older.find((x) => (w.routine_id ? x.routine_id === w.routine_id : false)) ?? older.find((x) => x.name === w.name);
   const u = unit();
-  const best = (sets: LoggedSet[]) => working(sets).reduce<LoggedSet | null>((a, s) => (!a || e1rm(s.weight_kg, s.reps) > e1rm(a.weight_kg, a.reps) ? s : a), null);
+  // For an assisted lift the best set is the one with the least help, which loadOf turns into the biggest load.
+  const bestBy = (load: (kg: number) => number, sets: LoggedSet[]) => working(sets).reduce<LoggedSet | null>((a, s) => (!a || e1rm(load(s.weight_kg), s.reps) > e1rm(load(a.weight_kg), a.reps) ? s : a), null);
   const show = (s: LoggedSet) => (s.weight_kg > 0 ? `${fmtWeight(s.weight_kg, u)} x ${s.reps}` : `${s.reps} reps`);
   const rows: ReviewRow[] = [];
   for (const e of w.exercises) {
-    const now = best(e.sets);
-    const was = prev ? best(prev.exercises.filter((x) => x.exercise_id === e.exercise_id).flatMap((x) => x.sets)) : null;
+    const load = loadOf(e.exercise_id);
+    const pick = scored(e.exercise_id) ? load : (kg: number) => kg;
+    const now = bestBy(pick, e.sets);
+    const was = prev ? bestBy(pick, prev.exercises.filter((x) => x.exercise_id === e.exercise_id).flatMap((x) => x.sets)) : null;
     if (!now) continue;
-    const a = now.weight_kg > 0 ? e1rm(now.weight_kg, now.reps) : now.reps;
-    const b = was ? (was.weight_kg > 0 ? e1rm(was.weight_kg, was.reps) : was.reps) : a;
+    const a = load(now.weight_kg) > 0 ? e1rm(load(now.weight_kg), now.reps) : now.reps;
+    const b = was ? (load(was.weight_kg) > 0 ? e1rm(load(was.weight_kg), was.reps) : was.reps) : a;
     // Assisted lifts log the help, so a bigger number is not better; show them without a verdict.
-    rows.push({ name: e.exercise_name, now: show(now), before: was ? show(was) : '', dir: isAssisted(e.exercise_id) ? 0 : a > b + 1e-6 ? 1 : a < b - 1e-6 ? -1 : 0 });
+    rows.push({ name: e.exercise_name, now: show(now), before: was ? show(was) : '', dir: !scored(e.exercise_id) ? 0 : a > b + 1e-6 ? 1 : a < b - 1e-6 ? -1 : 0 });
   }
   const v = workoutVolumeKg(w);
   const pv = prev ? workoutVolumeKg(prev) : 0;
@@ -142,7 +155,7 @@ export function liftStatus(): LiftStatus[] {
   for (const w of db.workouts) {
     if (Date.parse(w.started_at) < Date.now() - 42 * DAY) break;
     for (const e of w.exercises) {
-      if (seen.has(e.exercise_id) || isAssisted(e.exercise_id)) continue;
+      if (seen.has(e.exercise_id) || !scored(e.exercise_id)) continue;
       seen.add(e.exercise_id);
       const series = records(e.exercise_id).series.map((p) => p.one);
       if (series.length < 5) continue;
@@ -253,21 +266,22 @@ export function monthReport(offset = 0) {
     if (at < start.getTime()) break;
     if (at >= to) continue;
     for (const e of w.exercises) {
-      if (done.has(e.exercise_id) || isAssisted(e.exercise_id)) continue;
+      if (done.has(e.exercise_id) || !scored(e.exercise_id)) continue;
       done.add(e.exercise_id);
+      const load = loadOf(e.exercise_id);
       let best: LoggedSet | null = null, prior = 0;
       for (const sess of sessions(e.exercise_id)) {
         const st = Date.parse(sess.workout.started_at);
         if (st >= to) continue;
         for (const x of working(sess.sets)) {
-          const v = e1rm(x.weight_kg, x.reps);
+          const v = e1rm(load(x.weight_kg), x.reps);
           if (st < start.getTime()) prior = Math.max(prior, v);
-          else if (!best || v > e1rm(best.weight_kg, best.reps)) best = x;
+          else if (!best || v > e1rm(load(best.weight_kg), best.reps)) best = x;
         }
       }
       if (!best || prior <= 0) continue;
-      const pct = Math.round(((e1rm(best.weight_kg, best.reps) - prior) / prior) * 100);
-      if (pct >= 1) gains.push({ id: e.exercise_id, name: e.exercise_name, best: `${fmtWeight(best.weight_kg, u)} ${u} x ${best.reps}`, pct });
+      const pct = Math.round(((e1rm(load(best.weight_kg), best.reps) - prior) / prior) * 100);
+      if (pct >= 1) gains.push({ id: e.exercise_id, name: e.exercise_name, best: `${fmtWeight(best.weight_kg, u)} ${u}${isAssisted(e.exercise_id) ? ' help' : ''} x ${best.reps}`, pct });
     }
   }
   gains.sort((a, b) => b.pct - a.pct);

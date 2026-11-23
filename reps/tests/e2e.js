@@ -165,7 +165,10 @@ function seed() {
     '"Zed Day","1 Mar 2025, 10:00","1 Mar 2025, 10:50","","Bench Press (Barbell)","","",1,"normal",100,8,,,',
     '"Zed Day","1 Mar 2025, 10:00","1 Mar 2025, 10:50","","Zed Row (Old School Machine)","","felt, ""good""",0,"normal",90,153,,,',
     '"Zed Day","1 Mar 2025, 10:00","1 Mar 2025, 10:50","","Plank","","",0,"normal",,,,60,',
-    '"Zed Day","8 Mar 2025, 10:00","8 Mar 2025, 10:45","","Zed Row (Old School Machine)","","",0,"dropset",100,12,,,'].join('\n');
+    '"Zed Day","1 Mar 2025, 10:00","1 Mar 2025, 10:50","","Pull Up (Assisted)","","",0,"normal",100,10,,,',
+    '"Zed Day","8 Mar 2025, 10:00","8 Mar 2025, 10:45","","Zed Row (Old School Machine)","","",0,"dropset",100,12,,,',
+    '"Zed Day","8 Mar 2025, 10:00","8 Mar 2025, 10:45","","Pull Up (Assisted)","","",0,"normal",80,10,,,',
+    '"Zed Day","8 Mar 2025, 10:00","8 Mar 2025, 10:45","","Treadmill","","",0,"normal",,,,600,'].join('\n');
   const meas = '"date","weight_lbs","fat_percent","neck_cm","waist_cm"\n"14 Jan 2026, 00:00",181,,,\n"24 Feb 2026, 00:00",190,15.5,,84\n';
   fs.writeFileSync(path.join(OUT, 'workout_data.csv'), csv); fs.writeFileSync(path.join(OUT, 'measurement_data.csv'), meas);
   const before = (await data()).workouts.length;
@@ -178,6 +181,16 @@ function seed() {
   check(zrow && zrow.muscle_group === 'middle back' && zed[1].exercises[0].exercise_id === ex('Bench Press (Barbell)').id, 'known exercises link to the library, unknown ones become custom with a guessed muscle');
   check(Math.abs(zed[1].exercises[0].sets[1].weight_kg - 100 * 0.45359237) < 1e-6 && zed[1].exercises.some((e) => e.sets[0].seconds === 60) && zed[0].exercises[0].sets[0].set_type === 'drop' && /felt, "good"/.test(zed[1].notes), 'weights, timed sets, set types and notes come across');
   check(zed[0].exercises[0].sets[0].prs.includes('weight') && Math.abs(d.measures[0].weight_kg - 190 * 0.45359237) < 1e-6 && d.measures[0].parts.waist === 84, 'records recalculated and measurements stored');
+  const pu = d.customExercises.find((e) => e.name === 'Pull Up (Assisted)'); const lessHelp = zed[0].exercises.find((e) => e.exercise_id === pu.id).sets[0];
+  check(pu.muscle_group === 'lats' && lessHelp.prs.includes('weight'), 'assisted lift: less help counts as a record once body weight is known');
+  check(d.customExercises.find((e) => e.name === 'Treadmill').muscle_group === 'other', 'cardio is not counted as a muscle');
+  // edit a custom exercise
+  await go('/exercise/' + encodeURIComponent(pu.id)); t = await text(); check(/Assisted lift, scored as your body weight \(190 lb\)/.test(t), 'assisted lift is explained on its screen'); await shot('29b-assisted');
+  check(await tap('Exercise options') && await tap('Edit exercise'), 'open edit exercise'); await sleep(500);
+  check(await type('Exercise name', 'Pull Up (Assisted, Machine)') && await tap('Save'), 'rename a custom exercise'); await sleep(600);
+  d = await data();
+  const renamed = d.customExercises.find((e) => e.id === pu.id).name; // the test types after the old text, so only the ending is known
+  check(renamed.endsWith('(Assisted, Machine)') && d.workouts.find((w) => w.id === zed[0].id).exercises.some((e) => e.exercise_name === renamed), 'the new name shows in past workouts');
   // edit a workout: fix the 153
   await go('/edit-workout?id=' + zed[1].id); await shot('30-edit-workout');
   check(await type('Zed Row (Old School Machine) set 1 reps', '15') && await tap('Save changes'), 'edit a set'); await sleep(700);

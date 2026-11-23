@@ -4,7 +4,7 @@ import { Image, Pressable, ScrollView, View } from 'react-native';
 
 import { cap, fmtDate, fmtDay, fmtWeight, fromKg, thousands, trimNum } from '@/lib/format';
 import { liftStatus, suggest } from '@/lib/coach';
-import { exercise, frames, isAssisted, recordReset, records, resetRecords, sessions, useStore } from '@/lib/store';
+import { bodyKg, exercise, frames, isAssisted, pictureFrom, recordReset, records, resetRecords, sessions, useStore } from '@/lib/store';
 import type { PrKind } from '@/lib/types';
 import { Chart } from '@/ui/chart';
 import { C, Chip, Divider, Empty, Icon, IconBtn, Row, TapCard, Txt } from '@/ui/kit';
@@ -57,6 +57,7 @@ export default function ExerciseDetail() {
       <Txt size={14} color={C.muted}>Primary: {cap(ex.muscle_group)}</Txt>
       {ex.secondary.length > 0 && <Txt size={14} color={C.muted}>Secondary: {ex.secondary.map(cap).join(', ')}</Txt>}
       <Txt size={14} color={C.muted}>Equipment: {cap(ex.equipment)}</Txt>
+      {!!pictureFrom(ex.id) && <Txt size={13} color={C.muted}>Photos borrowed from a similar exercise: {pictureFrom(ex.id)!.name}.</Txt>}
     </View>
   );
 
@@ -74,8 +75,9 @@ export default function ExerciseDetail() {
     const change = first && first[key] > 0 && series.length > 1 ? Math.round(((series[series.length - 1][key] - first[key]) / first[key]) * 100) : null;
     const status = liftStatus().find((l) => l.id === ex.id);
     const next = suggest(ex.id, '');
-    const read = isAssisted(ex.id) ? 'Assisted lift: the weight is the help you get, so less is progress. Records and targets are not scored for it yet.'
-      : [change !== null && `${change >= 0 ? 'Up' : 'Down'} ${Math.abs(change)}% over ${RANGES[range][0] === 'All time' ? 'all time' : `the last ${RANGES[range][0].toLowerCase()}`}.`, status && status.status !== 'up' && (status.status === 'stalled' ? 'No new best in your last 3 sessions.' : 'Slipping from your best.'), next && `Next: ${next.next}.`].filter(Boolean).join(' ');
+    const assisted = isAssisted(ex.id);
+    const read = assisted && !bodyKg() ? 'Assisted lift: the number you log is the help you get. Add your body weight in Measures and Reps will score it as the load you lift.'
+      : [assisted && `Assisted lift, scored as your body weight (${fmtWeight(bodyKg(), u)} ${u}) minus the help, so less help reads as progress.`, change !== null && `${change >= 0 ? 'Up' : 'Down'} ${Math.abs(change)}% over ${RANGES[range][0] === 'All time' ? 'all time' : `the last ${RANGES[range][0].toLowerCase()}`}.`, status && status.status !== 'up' && (status.status === 'stalled' ? 'No new best in your last 3 sessions.' : 'Slipping from your best.'), next && `Next: ${next.next}.`].filter(Boolean).join(' ');
     const reset = recordReset(ex.id);
     const rec = (name: string, value: string) => (
       <View key={name}>
@@ -156,12 +158,14 @@ export default function ExerciseDetail() {
 
   const options = async () => {
     const reset = recordReset(ex.id);
-    const i = await menu(ex.name, [{ label: 'Reset personal records', icon: 'refresh-outline' }, ...(reset ? [{ label: 'Undo the reset', icon: 'arrow-undo-outline' as const }] : [])]);
+    const items = [{ label: 'Reset personal records', icon: 'refresh-outline' as const }, ...(reset ? [{ label: 'Undo the reset', icon: 'arrow-undo-outline' as const }] : []), ...(ex.custom ? [{ label: 'Edit exercise', icon: 'create-outline' as const }] : [])];
+    const i = await menu(ex.name, items);
+    if (items[i]?.label === 'Edit exercise') return router.push(`/create-exercise?edit=${encodeURIComponent(ex.id)}`);
     if (i === 0 && (await confirm('Reset personal records?', 'Your bests for this exercise start again from today. Useful after a layoff or a change of machine. Your history stays, and you can undo this.', 'Reset'))) {
       resetRecords(ex.id);
       toast('Records reset');
     }
-    if (i === 1) { resetRecords(ex.id, false); toast('Reset undone'); }
+    if (items[i]?.label === 'Undo the reset') { resetRecords(ex.id, false); toast('Reset undone'); }
   };
 
   return (

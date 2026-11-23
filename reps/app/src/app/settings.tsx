@@ -100,7 +100,7 @@ export default function Settings() {
         {row('refresh-outline', 'Restore from a backup', '', restore)}
       </View>
 
-      <Txt size={13} color={C.muted}>Reps 1.2 · Exercise library, photos and instructions from free-exercise-db (public domain).</Txt>
+      <Txt size={13} color={C.muted}>Reps 1.3 · Exercise library, photos and instructions from free-exercise-db (public domain).</Txt>
     </Page>
   );
 }
