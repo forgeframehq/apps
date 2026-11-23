@@ -75,3 +75,16 @@ Newest first. One entry per thing that cost real time. Say what happened, why, a
 - **Default workout names** ("Evening workout") repeat, so "used twice" is not enough to call something a routine.
 - **A deploy workflow should pass when its secrets are missing** and say what to add, so pushing it never turns the repo red.
 - **Test helper:** `type()` only replaces text in fields with `selectTextOnFocus`; elsewhere it appends.
+
+## 2026-11-23 — Investors Club
+
+- **Check what the free data plan really includes before designing around it.** Finnhub's free plan gives live quotes and company metrics but not price history ("candles" answer 403). Graphs come from Twelve Data's free plan instead (8 requests a minute, 800 a day). Both free plans are personal-use only: a product sold to schools needs a paid display licence.
+- **A shared key needs a shared cache.** Thirty students opening the app would each fetch thirty prices. The server keeps one copy, and a row in the database acts as a lock so only one request at a time refreshes it; the rest get the copy already there.
+- **Share rules between app and server by importing the same file.** The Worker imports `../../app/src/lib/rules.ts` and `provider.ts`. Wrangler bundles files outside its folder without complaint. Those files must not import React Native, and type-only `@/` imports need the same path alias in the backend's `tsconfig.json`.
+- **Serve the website from the Worker.** `assets` with `not_found_handling: "single-page-application"` and `run_worker_first: ["/api/*"]` puts the web app and the API on one address, so the website needs no server setting. `build.command` in `wrangler.jsonc` builds the web export before each deploy; `SKIP_WEB_BUILD=1` skips it for tests.
+- **Make a two-step write safe without transactions.** D1 batches cannot be conditional. Give the row a random `stamp`: the first statement updates it only if the old stamp still matches, and every later statement in the batch runs only if the new stamp is there. Two trades arriving together cannot both apply.
+- **Sign-in for children without accounts:** class code + first name and last initial + a PIN they choose. Hash the PIN with the class and name, lock after ten wrong tries, and let the teacher reset it.
+- **Test with a made-up market.** A `MOCK_MARKET` variable makes the server invent steady prices, so the end-to-end test needs no keys or network. It also means the real provider calls are untested until someone uses real keys: say so.
+- **A value that rounds to 0.00% should not be coloured.** Floating-point leftovers showed "-$0.00" in red on a portfolio that had not moved.
+- **Rewards shape behaviour.** Badges and levels pay for learning and diversifying, not for the number of trades, so the game does not teach children to trade often.
+- **`wrangler dev` outlives a plain `kill`.** It starts `workerd` children, so killing the shell job left a server on the port and the next test run talked to the old one and failed everywhere. Start it with `setsid` and kill the process group, refuse to start if the port already answers, and wait for `/api/health` instead of sleeping.

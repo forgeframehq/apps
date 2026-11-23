@@ -1,0 +1,56 @@
+# Builds an installable Android APK on GitHub's servers, so no computer is needed.
+# Run it from the repo's Actions tab ("Run workflow"), or just push a change under investors-club/app/.
+# The newest APK is attached to the "Investors Club (latest build)" release, and to the finished run's "Artifacts".
+name: Investors Club - Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['investors-club/app/**', '.github/workflows/investors-club-android.yml']
+
+permissions:
+  contents: write  # lets the job attach the APK to a release
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: investors-club/app
+    env:
+      # Optional. Set the repository variable INVESTORS_CLUB_SERVER_URL to the deployed class server's address and
+      # the app is built already connected to it. Without it, the address is typed in under Settings > Market data.
+      EXPO_PUBLIC_SERVER_URL: ${{ vars.INVESTORS_CLUB_SERVER_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: investors-club/app/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      # Generates the native android/ project from app.json.
+      - run: npx expo prebuild --platform android --no-install
+      # The generated project signs release builds with its bundled debug key. That is fine for
+      # installing on your own phone; use Expo's build service (eas.json) for a Play Store release.
+      - run: ./gradlew assembleRelease --no-daemon
+        working-directory: investors-club/app/android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: InvestorsClub-apk
+          path: investors-club/app/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+      # A release gives a plain download link that works from a phone browser.
+      - name: Attach the APK to the "investors-club-latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/InvestorsClub.apk"
+          gh release view investors-club-latest >/dev/null 2>&1 || gh release create investors-club-latest --target "$GITHUB_SHA" --title "Investors Club (latest build)" --notes "The most recent Investors Club build for Android. Download InvestorsClub.apk and open it on your phone."
+          gh release upload investors-club-latest "$RUNNER_TEMP/InvestorsClub.apk" --clobber

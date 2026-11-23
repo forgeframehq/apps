@@ -1,0 +1,26 @@
+{
+  "name": "investors-club",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "observability": { "enabled": true },
+  // Builds the website into ./public before each deploy, so one deploy serves the site and the API.
+  "build": { "command": "node build-web.mjs" },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  // Keeps prices, markers and graphs warm so a whole class opening the app does not use up the free data keys.
+  "triggers": { "crons": ["*/10 * * * *"] },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "investors-club",
+      "database_id": "1b380ff0-7593-4c2e-8560-0418a46bfe10"
+    }
+  ]
+  // Secrets (set in the Cloudflare dashboard, never in this file):
+  //   FINNHUB_KEY  prices and markers          TWELVE_KEY  graphs
+  //   SCHOOL_KEY   optional; when set, a teacher must enter it to create a class
+}

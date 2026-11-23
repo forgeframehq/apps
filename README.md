@@ -5,6 +5,7 @@ One folder per app. Each app keeps its own README with how to run, build and dep
 | App | What it is | Folder |
 | --- | --- | --- |
 | Reps | Standalone workout tracker (React Native + Expo) with an optional Claude connector | [`reps/`](reps/) |
+| Investors Club | Stock market game for schools in Bermuda: pretend money, real prices, class leaderboards | [`investors-club/`](investors-club/) |
 
 ## Conventions
 

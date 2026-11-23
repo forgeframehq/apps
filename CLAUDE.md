@@ -42,3 +42,4 @@ cd ../tests && ./run-e2e.sh                           # drives the app in a brow
 ## Apps
 
 - `reps/` — workout tracker. Expo app in `reps/app`, Cloudflare Worker (REST + sync + the Reps coach MCP connector) in `reps/backend`, exercise library builder in `reps/tools`, end-to-end test in `reps/tests`.
+- `investors-club/` — stock market game for schools. Expo app (Android + website) in `investors-club/app`, Cloudflare Worker (shared prices, classes, leaderboard, serves the website) in `investors-club/backend`, end-to-end test in `investors-club/tests`. Prices are real, so they are the one thing that needs a network; the rest works offline. `app/src/lib/provider.ts` and `rules.ts` are bundled by the server too: no React Native imports in them. Latest APK: `releases/download/investors-club-latest/InvestorsClub.apk`.
