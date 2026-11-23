@@ -22,8 +22,8 @@ export default function TabsLayout() {
       {/* The Workout tab is the index route so the app opens on it. */}
       <Tabs.Screen name="home" options={{ title: 'Home', tabBarIcon: icon('home-outline') }} />
       <Tabs.Screen name="index" options={{ title: 'Workout', tabBarIcon: icon('barbell-outline') }} />
+      <Tabs.Screen name="coach" options={{ title: 'Coach', tabBarIcon: icon('fitness-outline') }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: icon('person-outline') }} />
-      <Tabs.Screen name="connectors" options={{ title: 'Connectors', tabBarIcon: icon('extension-puzzle-outline') }} />
     </Tabs>
   );
 }

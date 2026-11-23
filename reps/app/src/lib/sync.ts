@@ -3,6 +3,7 @@
 // Routines and workouts Claude creates are pulled down; deletions travel both ways.
 import { AppState } from 'react-native';
 
+import { ENERGY, FEEL } from './coach';
 import { bump, commit, db, emptyLink, exercise, isLinked, onCommit, routine, saveData, unit, workout } from './store';
 import type { Exercise, Routine, Workout } from './types';
 
@@ -78,6 +79,13 @@ const ref = (id: string, fallback: string) => {
   return { exercise_id: id, name: e?.name ?? fallback, muscle_group: e?.muscle_group ?? 'other', equipment: e?.equipment ?? 'other' };
 };
 
+/** The server has one notes field, so the check-in travels as a line of text an assistant can read. */
+function notesWithCheckin(w: Workout): string {
+  if (!w.checkin) return w.notes;
+  const line = `Check-in: felt ${FEEL[w.checkin.feel - 1] ?? 'OK'}, energy ${ENERGY[w.checkin.energy - 1] ?? 'Normal'}.${w.checkin.note ? ` ${w.checkin.note}` : ''}`;
+  return [w.notes, line].filter(Boolean).join('\n');
+}
+
 async function run(): Promise<string> {
   let res: Reply;
   if (db.link.push_unit) {
@@ -102,7 +110,7 @@ async function run(): Promise<string> {
   for (const w of db.workouts) {
     if (!w.dirty) continue;
     res = await request('/api/workouts', 'POST', {
-      id: w.id, name: w.name, routine_id: w.routine_id, started_at: w.started_at, ended_at: w.ended_at, notes: w.notes, source: w.source,
+      id: w.id, name: w.name, routine_id: w.routine_id, started_at: w.started_at, ended_at: w.ended_at, notes: notesWithCheckin(w), source: w.source,
       exercises: w.exercises.map((e) => ({ ...ref(e.exercise_id, e.exercise_name), sets: e.sets })),
     });
     if (fatal(res)) return res.error;

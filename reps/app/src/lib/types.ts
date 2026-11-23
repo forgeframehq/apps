@@ -33,7 +33,11 @@ export interface Routine {
 
 export interface LoggedSet { set_type: SetType; weight_kg: number; reps: number; rpe: number | null; prs: PrKind[] }
 export interface LoggedExercise { exercise_id: string; exercise_name: string; muscle_group: string; sets: LoggedSet[] }
+/** How a session felt, answered on the Coach tab. feel: 1 Rough .. 5 Great; energy: 1 Low .. 3 High. */
+export interface Checkin { feel: number; energy: number; note: string }
+
 export interface Workout {
+  checkin?: Checkin;
   id: string;
   name: string;
   routine_id: string | null;
@@ -54,6 +58,7 @@ export interface ActiveExercise {
   rest_seconds: number;
   target_reps: string;
   cue: string;
+  coach?: string; // suggested target for today, from last session
   note: string;
   previous: LoggedSet[];
   sets: ActiveSet[];

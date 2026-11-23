@@ -49,7 +49,7 @@ export default function WorkoutTab() {
   };
   const askClaude = async () => {
     if (linked) return alertBox('Ask Claude', 'In Claude, try: "Build me a 4-day upper/lower split and save it to Reps." New routines appear here after the next sync.');
-    if (await confirm('Connect Claude', 'Claude can read your history, write routines and log workouts once you connect it. The app works fully without it.', 'Set it up', { cancelText: 'Not now' })) router.push('/connectors');
+    if (await confirm('Connect Claude', 'Claude can read your history, write routines and log workouts once you connect it. The app works fully without it.', 'Set it up', { cancelText: 'Not now' })) router.push('/assistant');
   };
   const sync = async () => {
     const r = await syncNow();

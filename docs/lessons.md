@@ -37,3 +37,11 @@ Newest first. One entry per thing that cost real time. Say what happened, why, a
 **Rename by rule, then curate.** The open dataset's names were inconsistent ("Barbell Bench Press - Medium Grip", "Pullups"). `reps/tools/exercise_names.py` turns them into "Movement - Variation (Equipment)" with rules plus an overrides table. Reviewing the full output by equipment group caught what rules alone got wrong.
 
 **Keep ids and file numbering stable when renaming.** Pictures are numbered by the dataset's original order, so a rename changes two JSON files and no images. Saved routines and workouts refresh their stored names from the library on launch, and the server re-seeds its library when a name differs.
+
+## 2026-11-22 — Reps: Coach tab replaces Connectors
+
+- **A setup screen is not a tab.** Connectors was used once and then sat in the tab bar. Tabs are for things opened every session; setup goes one level down (Coach → Connect an assistant, also in Settings).
+- **Make the feature work offline first, then let the assistant add to it.** Coach (check-in, review, next targets, weekly view) is plain arithmetic on local history in `src/lib/coach.ts`. The assistant is an extra, so the tab is never empty for someone who connects nothing.
+- **One MCP server serves Claude, ChatGPT and Gemini.** All three accept a custom remote MCP address, so there is one connector address and three sets of instructions, not three integrations. ChatGPT and Gemini are untested here and have plan/region limits; say so in the app.
+- **New per-workout data without a schema change:** the check-in is stored on the phone as its own field and appended to the workout notes when uploaded (`notesWithCheckin` in `sync.ts`), so the server and the assistant see it with no backend change.
+- **Renaming a route:** grep for the old path in `router.push`, the root `Stack.Screen` names, and the e2e test; TypeScript does not catch a stale route string.

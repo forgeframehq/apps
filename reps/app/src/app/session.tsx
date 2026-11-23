@@ -167,7 +167,7 @@ export default function Session() {
     const w = finishWorkout();
     if (!w) return;
     const records = workoutRecords(w);
-    router.replace('/home');
+    router.replace('/coach'); // straight to the check-in for this workout
     toast(records ? `Workout saved · ${plural(records, 'new record')}` : 'Workout saved');
   };
   const discard = async () => {
@@ -212,6 +212,7 @@ export default function Session() {
                 <IconBtn name="ellipsis-vertical" label={`Options for ${ex.name}`} side={40} size={20} onPress={() => exerciseMenu(ex)} />
               </Row>
               {!!(ex.target_reps || ex.cue) && <Txt size={14} color={C.muted}>{[ex.target_reps && `Target ${ex.target_reps} reps`, ex.cue].filter(Boolean).join(' · ')}</Txt>}
+              {!!ex.coach && <Txt size={14} color={C.accent}>Coach: {ex.coach}</Txt>}
               <Row gap={8}>
                 <Btn title={`Rest: ${ex.rest_seconds ? fmtClock(ex.rest_seconds) : 'OFF'}`} kind="card" icon="timer-outline" height={40} onPress={() => pickRest(ex)} />
                 <Btn title={ex.note || 'Note'} kind="card" icon="document-text-outline" height={40} left style={ex.note ? { flex: 1 } : undefined} onPress={() => editNote(ex)} />

@@ -78,6 +78,7 @@ function seed() {
   check(await tap('Start Routine'), 'Start Routine'); await sleep(500); await shot('03-session');
   let t = await text();
   check(t.includes('Log Workout') && t.includes('PREVIOUS'), 'session screen');
+  check(/Coach: \d+ lb/.test(t), 'coach target shown on each exercise');
   check(/\d+lb x \d+/.test(t), 'previous numbers from local history');
   check(await type('Set 1 weight', '250') && await type('Set 1 reps', '6') && await type('Set 2 weight', '400') && await type('Set 2 reps', '5'), 'type weight and reps');
   check(await tap('Set 1 done') && await tap('Set 2 done') && await tap('Set 3 done'), 'tick three sets');
@@ -94,12 +95,17 @@ function seed() {
   await p.goBack(); await sleep(700); await shot('10-minibar');
   check((await text()).includes('in progress'), 'workout-in-progress bar'); check(await tap('Resume'), 'Resume'); await sleep(500);
   check(await tap('Finish'), 'Finish'); await shot('11-finish-dialog'); check(await tap('Finish', 'last'), 'confirm finish'); await sleep(900);
-  await shot('12-home-feed');
+  await shot('12-coach-checkin');
+  t = await text();
+  check(t.includes('How was') && t.includes('LAST WORKOUT') && t.includes('UP NEXT'), 'lands on Coach with check-in, review and next targets');
+  check(t.includes('Workout saved'), 'saved toast');
+  check(await tap('Good') && await tap('High') && await tap('Save check-in'), 'answer the check-in'); await shot('12b-coach');
+  check(((await data()).workouts[0].checkin || {}).feel === 4 && !(await text()).includes('How was'), 'check-in saved with the workout');
+  await go('/home'); await shot('12c-home-feed');
   let d = await data();
   check(d.workouts.length === 31 && d.workouts[0].exercises[0].sets.length === 3, 'workout saved on the device');
   check(d.workouts[0].exercises[0].sets[1].prs.includes('weight') && d.workouts[0].exercises[0].sets[0].prs.length === 0, 'new records marked on the right set');
   check(d.workouts[0].exercises[0].sets[0].set_type === 'warmup' && d.workouts[0].exercises[0].sets[2].rpe === 8.5, 'set type and RPE saved');
-  check((await text()).includes('Workout saved'), 'saved toast');
   check(await tap(`Open ${d.workouts[0].name}`), 'open workout detail'); await shot('13-workout-detail');
   check(await tap(`Details for ${d.workouts[0].exercises[0].exercise_name}`), 'open exercise from workout'); await sleep(500); await shot('14-exercise-summary');
   t = await text(); check(t.includes('Personal Records') && t.includes('Set Records'), 'exercise summary with records');
@@ -109,14 +115,16 @@ function seed() {
   check(await tap('Statistics'), 'Statistics'); await shot('18-statistics'); check((await text()).includes('Sets per muscle group'), 'statistics');
   await go('/calendar'); await shot('19-calendar'); check((await text()).includes('this month'), 'calendar');
   await go('/settings'); await shot('20-settings');
-  await go('/connectors'); await shot('21-connectors'); check((await text()).includes('Not connected'), 'connectors tab');
-  check(await tap('Connect'), 'open Claude'); await sleep(500); await shot('22-claude-connect');
+  await go('/coach'); await shot('21-coach'); check((await text()).includes('AI COACH (OPTIONAL)'), 'coach tab offers the optional AI coach');
+  check(await tap('Connect an assistant'), 'open assistant setup'); await sleep(500); await shot('22-assistant-connect');
   check(await type('Server address', API) && await type('Token', token), 'enter server and token');
-  check(await tap('Connect'), 'Connect'); await sleep(6000); await shot('23-claude-connected');
+  check(await tap('Connect'), 'Connect'); await sleep(6000); await shot('23-assistant-connected');
   t = await text(); check(t.includes('CONNECTED') && t.includes('Synced'), 'connected and synced');
+  check(await tap('ChatGPT') && (await text()).includes('Apps & Connectors'), 'steps for other assistants'); await shot('23b-assistant-chatgpt');
   let remote = await api('/api/sync');
   check(remote.workouts.length === 31 && remote.routines.length === 4, `server has the phone's data (${remote.workouts.length} workouts, ${remote.routines.length} routines)`);
   d = await data(); check(!d.workouts.some((w) => w.dirty) && !d.routines.some((r) => r.dirty), 'nothing left to upload');
+  const mine = await api('/api/workouts/' + d.workouts[0].id); check(/Check-in: felt Good, energy High/.test(mine.notes || ''), 'check-in reached the server for the assistant to read');
   // what Claude would do on the server
   const r1 = await api('/api/routines', 'POST', { name: 'Claude Upper', folder: 'From Claude', exercises: [{ exercise: 'Bench Press (Barbell)', sets: 4, reps: '6' }, { exercise: 'Landmine Twist Thing', muscle_group: 'abdominals' }] });
   const w1 = await api('/api/workouts', 'POST', { name: 'Told Claude', source: 'claude', duration_minutes: 40, exercises: [{ exercise: 'Squat (Barbell)', sets: [{ weight_kg: 200, reps: 3 }] }] });
@@ -130,7 +138,7 @@ function seed() {
   check(d.workouts.length === 32 && told && told.source === 'claude' && told.exercises[0].sets[0].prs.length > 0, "pulled Claude's workout with records");
   check(d.customExercises.some((e) => e.name === 'Landmine Twist Thing'), 'pulled custom exercise');
   await go('/'); await shot('24-workout-tab-synced'); check((await text()).includes('Claude Upper'), "Claude's routine shows on the Workout tab");
-  await go('/connectors'); await shot('25-connectors-linked'); check((await text()).includes('Connected'), 'connectors shows connected');
+  await go('/coach'); await shot('25-coach-linked'); check((await text()).includes('Manage connection'), 'coach shows the assistant is connected');
   // restart persistence
   await go('/home'); await shot('26-home-after-restart'); check((await text()).includes('Told Claude'), 'data survives a restart');
   console.log('page errors:', errs.filter((e) => !/favicon|shadow\*|pointerEvents|useNativeDriver/.test(e)).slice(0, 6));

@@ -8,7 +8,7 @@ import { FRAMES, THUMBS } from '@/data/images';
 
 import { fromKg, isoNow, newId, toKg } from './format';
 import { readJson, removeJson, writeJson } from './storage';
-import type { ActiveExercise, ActiveSet, ActiveWorkout, Exercise, Link, LoggedSet, PrKind, Routine, Settings, Tombstone, Unit, Workout } from './types';
+import type { ActiveExercise, ActiveSet, ActiveWorkout, Checkin, Exercise, Link, LoggedSet, PrKind, Routine, Settings, Tombstone, Unit, Workout } from './types';
 
 export const emptyLink = (): Link => ({ base_url: '', token: '', cursor: '', last_sync: 0, error: '', push_unit: false });
 
@@ -178,6 +178,13 @@ export function deleteRoutine(id: string) {
 // ---------- workouts & history ----------
 
 export const workout = (id: string) => db.workouts.find((w) => w.id === id);
+export function saveCheckin(id: string, checkin: Checkin) {
+  const w = workout(id);
+  if (!w) return;
+  w.checkin = checkin;
+  w.dirty = true; // so a connected assistant sees how the session felt
+  commit();
+}
 export function deleteWorkout(id: string) {
   db.workouts = db.workouts.filter((w) => w.id !== id);
   if (isLinked()) db.deleted.push({ kind: 'workout', id });
@@ -328,8 +335,12 @@ function activeItem(exId: string, name: string, rest: number, targetReps: string
     if (!targetReps && previous[i]?.set_type === 'warmup') s.type = 'warmup';
     return s;
   });
-  return { key: newId(), exercise_id: exId, name, rest_seconds: rest, target_reps: targetReps, cue, note: '', previous, sets };
+  return { key: newId(), exercise_id: exId, name, rest_seconds: rest, target_reps: targetReps, cue, coach: coachHint(exId, targetReps), note: '', previous, sets };
 }
+
+let coachHint: (exId: string, targetReps: string) => string | undefined = () => undefined;
+/** coach.ts registers its suggestion function here (it imports this module, so the link goes this way round). */
+export const setCoachHint = (fn: typeof coachHint) => { coachHint = fn; };
 
 export function startWorkout(r?: Routine) {
   db.active = {
