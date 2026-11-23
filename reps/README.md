@@ -27,7 +27,7 @@ npx expo start          # scan the QR code with Expo Go
 
 Either route gives you an installable file; neither needs Android Studio.
 
-**GitHub (nothing to run yourself):** the "Reps - Android APK" workflow builds on every push to `main` that touches `reps/app/`, or run it by hand from the Actions tab. Download `Reps-apk` from the finished run.
+**GitHub (nothing to run yourself):** the "Reps - Android APK" workflow builds on every push to `main` that touches `reps/app/`, or run it by hand from the Actions tab. The newest build is always `Reps.apk` on the repo's "Reps (latest build)" release.
 
 **Expo's build service:** needs a free Expo account.
 

@@ -1,6 +1,6 @@
 # Builds an installable Android APK on GitHub's servers, so no computer is needed.
 # Run it from the repo's Actions tab ("Run workflow"), or just push a change under reps/app/.
-# The APK appears under the finished run's "Artifacts".
+# The newest APK is attached to the "Reps (latest build)" release, and to the finished run's "Artifacts".
 name: Reps - Android APK
 
 on:
@@ -8,6 +8,9 @@ on:
   push:
     branches: [main]
     paths: ['reps/app/**', '.github/workflows/reps-android.yml']
+
+permissions:
+  contents: write  # lets the job attach the APK to a release
 
 jobs:
   apk:
@@ -39,3 +42,11 @@ jobs:
           name: Reps-apk
           path: reps/app/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+      # A release gives a plain download link that works from a phone browser.
+      - name: Attach the APK to the "reps-latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/Reps.apk"
+          gh release view reps-latest >/dev/null 2>&1 || gh release create reps-latest --target "$GITHUB_SHA" --title "Reps (latest build)" --notes "The most recent Reps build for Android. Download Reps.apk and open it on your phone."
+          gh release upload reps-latest "$RUNNER_TEMP/Reps.apk" --clobber
