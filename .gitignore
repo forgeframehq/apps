@@ -8,3 +8,4 @@ dist/
 *.jks
 **/android/
 **/ios/
+__pycache__/

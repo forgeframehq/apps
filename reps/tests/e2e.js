@@ -18,8 +18,8 @@ const check = (ok, what) => { console.log((ok ? 'ok   ' : 'FAIL ') + what); if (
 const api = (path, method = 'GET', body) => fetch(API + path, { method, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }).then((r) => r.json());
 
 function seed() {
-  const bench = ex('Barbell Bench Press - Medium Grip'), ohp = ex('Standing Military Press'), lat = ex('Side Lateral Raise');
-  const squat = ex('Barbell Squat'), curl = ex('Lying Leg Curls'), pull = ex('Wide-Grip Lat Pulldown'), row = ex('Seated Cable Rows');
+  const bench = ex('Bench Press (Barbell)'), ohp = ex('Overhead Press (Barbell)'), lat = ex('Lateral Raise (Dumbbell)');
+  const squat = ex('Squat (Barbell)'), curl = ex('Lying Leg Curl (Machine)'), pull = ex('Lat Pulldown - Wide Grip (Cable)'), row = ex('Seated Row (Cable)');
   const mk = (e, sets, reps) => ({ exercise_id: e.id, exercise_name: e.name, target_sets: sets, target_reps: reps, rest_seconds: 120, notes: '' });
   const id = () => Math.random().toString(36).slice(2).padEnd(12, '0') + Date.now().toString(36);
   const routines = [
@@ -89,7 +89,7 @@ function seed() {
   check(await tap('Set 1 type'), 'open set menu'); check(await tap('Warm-up set'), 'mark warm-up'); await shot('06-session-warmup');
   check(await tap('Add Exercise'), 'Add Exercise'); await sleep(600); await shot('07-picker');
   check(await type('Search exercise', 'hammer curl'), 'search'); await sleep(500); await shot('08-picker-search');
-  check(await tap('Hammer Curls') || await tap('Alternate Hammer Curl'), 'choose exercise'); await sleep(600);
+  check(await tap('Hammer Curl (Dumbbell)'), 'choose exercise'); await sleep(600);
   t = await text(); check(/Hammer Curl/.test(t) && t.includes('Log Workout'), 'exercise added to workout'); await shot('09-session-added');
   await p.goBack(); await sleep(700); await shot('10-minibar');
   check((await text()).includes('in progress'), 'workout-in-progress bar'); check(await tap('Resume'), 'Resume'); await sleep(500);
@@ -118,8 +118,8 @@ function seed() {
   check(remote.workouts.length === 31 && remote.routines.length === 4, `server has the phone's data (${remote.workouts.length} workouts, ${remote.routines.length} routines)`);
   d = await data(); check(!d.workouts.some((w) => w.dirty) && !d.routines.some((r) => r.dirty), 'nothing left to upload');
   // what Claude would do on the server
-  const r1 = await api('/api/routines', 'POST', { name: 'Claude Upper', folder: 'From Claude', exercises: [{ exercise: 'Barbell Bench Press - Medium Grip', sets: 4, reps: '6' }, { exercise: 'Landmine Twist Thing', muscle_group: 'abdominals' }] });
-  const w1 = await api('/api/workouts', 'POST', { name: 'Told Claude', source: 'claude', duration_minutes: 40, exercises: [{ exercise: 'Barbell Squat', sets: [{ weight_kg: 200, reps: 3 }] }] });
+  const r1 = await api('/api/routines', 'POST', { name: 'Claude Upper', folder: 'From Claude', exercises: [{ exercise: 'Bench Press (Barbell)', sets: 4, reps: '6' }, { exercise: 'Landmine Twist Thing', muscle_group: 'abdominals' }] });
+  const w1 = await api('/api/workouts', 'POST', { name: 'Told Claude', source: 'claude', duration_minutes: 40, exercises: [{ exercise: 'Squat (Barbell)', sets: [{ weight_kg: 200, reps: 3 }] }] });
   check(!!r1.id && w1.pr_count > 0, 'server-side routine and workout (with records) created');
   const quick = d.routines.find((r) => r.name === 'Quick Full Body'); await api('/api/routines/' + quick.id, 'DELETE');
   check(await tap('Sync now'), 'Sync now'); await sleep(3500);

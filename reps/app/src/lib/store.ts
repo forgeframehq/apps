@@ -87,11 +87,20 @@ export async function load() {
   }
   db.active = (await readJson<ActiveWorkout>('active')) ?? null;
   reindex();
+  refreshNames();
   db.ready = true;
   bump();
 }
 
 // ---------- library ----------
+
+/** Saved routines and workouts carry the exercise name they were logged with; bring them in line with the library after an update renames exercises. */
+function refreshNames() {
+  const current = (id: string, fallback: string) => byId.get(id)?.name ?? fallback;
+  for (const r of db.routines) for (const e of r.exercises) e.exercise_name = current(e.exercise_id, e.exercise_name);
+  for (const w of db.workouts) for (const e of w.exercises) e.exercise_name = current(e.exercise_id, e.exercise_name);
+  for (const e of db.active?.exercises ?? []) e.name = current(e.exercise_id, e.name);
+}
 
 export const exercise = (id: string): Exercise | undefined => byId.get(id);
 export const allExercises = (): Exercise[] => [...db.customExercises, ...library];

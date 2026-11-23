@@ -31,3 +31,9 @@ Newest first. One entry per thing that cost real time. Say what happened, why, a
 **Background commands that wait on input hang the session.** `cat > file` with no input, or `curl` with no timeout against a dead server, blocks until killed. Always give `curl` a `-m` timeout.
 
 **Stale data models bite quietly.** When the app moved to local-first, the old online-only client was left in the zip and no longer matched. Remove what a change makes obsolete.
+
+## 2026-11-22 — Exercise names
+
+**Rename by rule, then curate.** The open dataset's names were inconsistent ("Barbell Bench Press - Medium Grip", "Pullups"). `reps/tools/exercise_names.py` turns them into "Movement - Variation (Equipment)" with rules plus an overrides table. Reviewing the full output by equipment group caught what rules alone got wrong.
+
+**Keep ids and file numbering stable when renaming.** Pictures are numbered by the dataset's original order, so a rename changes two JSON files and no images. Saved routines and workouts refresh their stored names from the library on launch, and the server re-seeds its library when a name differs.

@@ -89,13 +89,20 @@ let libraryReady = false;
 export async function ensureLibrary(db: D1Database) {
   if (libraryReady) return;
   const rows = LIBRARY as string[][];
+  // Reload when rows are missing or the library was renamed since this database was last seeded.
   const have = await db.prepare('SELECT COUNT(*) AS n FROM exercises WHERE user_id IS NULL').first<{ n: number }>();
-  if ((have?.n ?? 0) < rows.length) {
+  const sample = await db.prepare('SELECT name FROM exercises WHERE id = ? AND user_id IS NULL').bind(rows[rows.length - 1][0]).first<{ name: string }>();
+  if ((have?.n ?? 0) < rows.length || sample?.name !== rows[rows.length - 1][1]) {
     const stmts: D1PreparedStatement[] = [];
     for (let i = 0; i < rows.length; i += 25) {
       const chunk = rows.slice(i, i + 25);
       stmts.push(
-        db.prepare(`INSERT OR IGNORE INTO exercises (id, user_id, name, muscle_group, equipment) VALUES ${chunk.map(() => '(?, NULL, ?, ?, ?)').join(', ')}`).bind(...chunk.flat()),
+        db
+          .prepare(
+            `INSERT INTO exercises (id, user_id, name, muscle_group, equipment) VALUES ${chunk.map(() => '(?, NULL, ?, ?, ?)').join(', ')}
+             ON CONFLICT(id) DO UPDATE SET name = excluded.name, muscle_group = excluded.muscle_group, equipment = excluded.equipment`,
+          )
+          .bind(...chunk.flat()),
       );
     }
     await db.batch(stmts);
