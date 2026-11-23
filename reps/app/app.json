@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Reps",
+    "slug": "reps",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "reps",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#000000",
+    "ios": {
+      "bundleIdentifier": "com.forgeframe.reps",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.forgeframe.reps",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0B0C",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#000000",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 96
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#FF6B2C"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

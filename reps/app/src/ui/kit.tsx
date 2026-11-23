@@ -1,0 +1,196 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import React from 'react';
+import {
+  ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  type StyleProp, type TextInputProps, type TextStyle, type ViewStyle,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { initials } from '@/lib/format';
+import { thumb } from '@/lib/store';
+
+export const C = {
+  bg: '#000000',
+  bar: '#161618',
+  card: '#1C1C1F',
+  cardHi: '#2A2A2E',
+  border: '#2C2C31',
+  text: '#FFFFFF',
+  muted: '#8E8E96',
+  accent: '#FF6B2C',
+  accentDim: '#3B1D10',
+  warm: '#F5B83D',
+  good: '#2FBF71',
+  goodDim: '#0F2A1B',
+  bad: '#F0524F',
+  dark: '#0B0B0C',
+} as const;
+
+export type IconName = React.ComponentProps<typeof Ionicons>['name'];
+export const Icon = ({ name, size = 22, color = C.text }: { name: IconName; size?: number; color?: string }) => <Ionicons name={name} size={size} color={color} />;
+
+export function Txt({ children, size = 16, color = C.text, bold, center, lines, style }: {
+  children: React.ReactNode; size?: number; color?: string; bold?: boolean; center?: boolean; lines?: number; style?: StyleProp<TextStyle>;
+}) {
+  return (
+    <Text numberOfLines={lines} style={[{ color, fontSize: size, lineHeight: Math.round(size * 1.35), fontWeight: bold ? '700' : '400', textAlign: center ? 'center' : undefined }, style]}>
+      {children}
+    </Text>
+  );
+}
+
+type Kind = 'primary' | 'card' | 'ghost' | 'good' | 'danger' | 'text' | 'plain';
+const KIND: Record<Kind, { bg: string; fg: string }> = {
+  primary: { bg: C.accent, fg: C.text },
+  card: { bg: C.card, fg: C.text },
+  ghost: { bg: C.cardHi, fg: C.text },
+  good: { bg: C.good, fg: C.dark },
+  danger: { bg: C.card, fg: C.bad },
+  text: { bg: 'transparent', fg: C.accent },
+  plain: { bg: 'transparent', fg: C.muted },
+};
+
+export function Btn({ title, onPress, kind = 'primary', icon, disabled, busy, left, height, color, style, testID }: {
+  title: string; onPress?: () => void; kind?: Kind; icon?: IconName; disabled?: boolean; busy?: boolean;
+  left?: boolean; height?: number; color?: string; style?: StyleProp<ViewStyle>; testID?: string;
+}) {
+  const k = KIND[kind];
+  const fg = color ?? k.fg;
+  const link = kind === 'text' || kind === 'plain';
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      testID={testID}
+      disabled={disabled || busy}
+      onPress={onPress}
+      style={({ pressed }) => [
+        s.btn,
+        { backgroundColor: k.bg, minHeight: height ?? (link ? 38 : 50), opacity: disabled ? 0.45 : pressed ? 0.7 : 1, justifyContent: left ? 'flex-start' : 'center' },
+        link && { paddingHorizontal: 8 },
+        style,
+      ]}>
+      {busy ? <ActivityIndicator color={fg} /> : (
+        <>
+          {icon && <Icon name={icon} size={20} color={fg} />}
+          <Text numberOfLines={1} style={{ color: fg, fontSize: link ? 15 : 16, fontWeight: kind === 'primary' || kind === 'good' ? '700' : '500', flexShrink: 1 }}>{title}</Text>
+        </>
+      )}
+    </Pressable>
+  );
+}
+
+export function IconBtn({ name, onPress, color = C.text, size = 24, side = 44, bg = 'transparent', disabled, label }: {
+  name: IconName; onPress?: () => void; color?: string; size?: number; side?: number; bg?: string; disabled?: boolean; label: string;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      disabled={disabled}
+      onPress={onPress}
+      hitSlop={6}
+      style={({ pressed }) => ({ width: side, height: side, borderRadius: 10, backgroundColor: bg, alignItems: 'center', justifyContent: 'center', opacity: disabled ? 0.3 : pressed ? 0.6 : 1 })}>
+      <Icon name={name} size={size} color={color} />
+    </Pressable>
+  );
+}
+
+export function Chip({ title, selected, onPress }: { title: string; selected?: boolean; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ selected }} onPress={onPress}
+      style={({ pressed }) => [s.chip, { backgroundColor: selected ? C.accent : C.cardHi, opacity: pressed ? 0.7 : 1 }]}>
+      <Text style={{ color: C.text, fontSize: 14, fontWeight: '500' }}>{title}</Text>
+    </Pressable>
+  );
+}
+
+export const Card = ({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) => <View style={[s.card, style]}>{children}</View>;
+
+export function TapCard({ children, onPress, style, bare, label }: { children: React.ReactNode; onPress: () => void; style?: StyleProp<ViewStyle>; bare?: boolean; label?: string }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [!bare && s.card, { opacity: pressed ? 0.7 : 1 }, style]}>
+      {children}
+    </Pressable>
+  );
+}
+
+export function Field(props: TextInputProps) {
+  return <TextInput placeholderTextColor={C.muted} selectionColor={C.accent} {...props} style={[s.field, props.style]} />;
+}
+
+export function SearchField(props: TextInputProps) {
+  return (
+    <View style={s.search}>
+      <Icon name="search" size={20} color={C.muted} />
+      <TextInput placeholderTextColor={C.muted} selectionColor={C.accent} autoCorrect={false} returnKeyType="search" {...props} style={{ flex: 1, color: C.text, fontSize: 16, minHeight: 48, minWidth: 0 }} />
+    </View>
+  );
+}
+
+export const Caption = ({ children }: { children: string }) => <Text style={s.caption}>{children.toUpperCase()}</Text>;
+export const Divider = ({ color = C.border }: { color?: string }) => <View style={{ height: StyleSheet.hairlineWidth * 2, backgroundColor: color }} />;
+export const Row = ({ children, gap = 10, style }: { children: React.ReactNode; gap?: number; style?: StyleProp<ViewStyle> }) => <View style={[{ flexDirection: 'row', alignItems: 'center', gap }, style]}>{children}</View>;
+
+export function Empty({ icon, title, body }: { icon: IconName; title: string; body: string }) {
+  return (
+    <View style={{ alignItems: 'center', paddingVertical: 36, paddingHorizontal: 12, gap: 8 }}>
+      <Icon name={icon} size={44} color={C.muted} />
+      <Txt size={19} bold center>{title}</Txt>
+      <Txt size={15} color={C.muted} center>{body}</Txt>
+    </View>
+  );
+}
+
+export function Stat({ title, value, color = C.text, medal }: { title: string; value: string; color?: string; medal?: boolean }) {
+  return (
+    <View style={{ gap: 2 }}>
+      <Txt size={13} color={C.muted}>{title}</Txt>
+      <Row gap={5}>
+        {medal && <Icon name="ribbon" size={16} color={C.warm} />}
+        <Txt size={17} color={color}>{value}</Txt>
+      </Row>
+    </View>
+  );
+}
+
+/** Round picture for an exercise: its image, or its initials if it has none. */
+export function Avatar({ id, name, size = 48 }: { id: string; name: string; size?: number }) {
+  const src = thumb(id);
+  const box = { width: size, height: size, borderRadius: size / 2 };
+  if (src) return <Image source={src} style={[box, { backgroundColor: '#fff' }]} />;
+  return (
+    <View style={[box, { backgroundColor: C.cardHi, alignItems: 'center', justifyContent: 'center' }]}>
+      <Text style={{ color: C.muted, fontWeight: '700', fontSize: size * 0.36 }}>{initials(name)}</Text>
+    </View>
+  );
+}
+
+/** Scrolling page body with the standard padding. */
+export function Page({ children, gap = 14, pad = 16, bottom = 28 }: { children: React.ReactNode; gap?: number; pad?: number; bottom?: number }) {
+  return (
+    <ScrollView style={{ flex: 1, backgroundColor: C.bg }} contentContainerStyle={{ padding: pad, paddingTop: 12, paddingBottom: bottom, gap }} keyboardShouldPersistTaps="handled">
+      {children}
+    </ScrollView>
+  );
+}
+
+/** Big left-aligned title with actions, used at the top of each tab. */
+export function TabHeader({ title, children }: { title: string; children?: React.ReactNode }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={{ paddingTop: insets.top + 6, paddingHorizontal: 16, paddingBottom: 4, flexDirection: 'row', alignItems: 'center', backgroundColor: C.bg, minHeight: insets.top + 58 }}>
+      <Txt size={28} bold style={{ flex: 1 }}>{title}</Txt>
+      {children}
+    </View>
+  );
+}
+
+export const s = StyleSheet.create({
+  btn: { borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14 },
+  chip: { minHeight: 36, borderRadius: 18, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
+  card: { backgroundColor: C.card, borderRadius: 16, padding: 16, gap: 10 },
+  field: { backgroundColor: C.card, color: C.text, borderRadius: 12, paddingHorizontal: 14, minHeight: 48, fontSize: 16, minWidth: 0 },
+  search: { backgroundColor: C.card, borderRadius: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  caption: { color: C.muted, fontSize: 12, letterSpacing: 0.4 },
+});

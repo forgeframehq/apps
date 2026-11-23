@@ -1,0 +1,13 @@
+{
+  "name": "reps",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "forgelift",
+      "database_id": "03de2bdf-6449-432a-ba40-152a9f89ed1c"
+    }
+  ]
+}

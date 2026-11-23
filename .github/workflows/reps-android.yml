@@ -1,0 +1,41 @@
+# Builds an installable Android APK on GitHub's servers, so no computer is needed.
+# Run it from the repo's Actions tab ("Run workflow"), or just push a change under reps/app/.
+# The APK appears under the finished run's "Artifacts".
+name: Reps - Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['reps/app/**', '.github/workflows/reps-android.yml']
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: reps/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: reps/app/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      # Generates the native android/ project from app.json.
+      - run: npx expo prebuild --platform android --no-install
+      # The generated project signs release builds with its bundled debug key. That is fine for
+      # installing on your own phone; use Expo's build service (eas.json) for a Play Store release.
+      - run: ./gradlew assembleRelease --no-daemon
+        working-directory: reps/app/android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Reps-apk
+          path: reps/app/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
