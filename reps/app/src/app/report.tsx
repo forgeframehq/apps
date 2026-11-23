@@ -85,10 +85,10 @@ export default function Report() {
             <Card>
               <Caption>Push / pull / legs</Caption>
               <View style={{ flexDirection: 'row', height: 12, borderRadius: 6, overflow: 'hidden', backgroundColor: C.cardHi }}>
-                <View style={{ flex: r.split.push, backgroundColor: C.accent }} /><View style={{ flex: r.split.pull, backgroundColor: C.warm }} /><View style={{ flex: r.split.legs, backgroundColor: C.good }} />
+                <View style={{ flex: r.split.push, backgroundColor: C.accent }} /><View style={{ flex: r.split.pull, backgroundColor: C.warm }} /><View style={{ flex: r.split.legs, backgroundColor: C.third }} />
               </View>
               <Row gap={18}>
-                {([['Push', r.split.push, C.accent], ['Pull', r.split.pull, C.warm], ['Legs', r.split.legs, C.good]] as const).map(([name, n, color]) => (
+                {([['Push', r.split.push, C.accent], ['Pull', r.split.pull, C.warm], ['Legs', r.split.legs, C.third]] as const).map(([name, n, color]) => (
                   <Row key={name} gap={6}><View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: color }} /><Txt size={14}>{name} {Math.round((n / all) * 100)}%</Txt></Row>
                 ))}
               </Row>

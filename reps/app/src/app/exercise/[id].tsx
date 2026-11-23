@@ -3,13 +3,16 @@ import { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, View } from 'react-native';
 
 import { cap, fmtDate, fmtDay, fmtWeight, fromKg, thousands, trimNum } from '@/lib/format';
-import { exercise, frames, records, sessions, useStore } from '@/lib/store';
+import { liftStatus, suggest } from '@/lib/coach';
+import { exercise, frames, isAssisted, recordReset, records, resetRecords, sessions, useStore } from '@/lib/store';
 import type { PrKind } from '@/lib/types';
 import { Chart } from '@/ui/chart';
 import { C, Chip, Divider, Empty, Icon, IconBtn, Row, TapCard, Txt } from '@/ui/kit';
+import { confirm, menu, toast } from '@/ui/overlay';
 
 const TABS = ['Summary', 'History', 'How to'];
 const METRICS: [string, 'heaviest' | 'one' | 'best_set' | 'volume'][] = [['Heaviest Weight', 'heaviest'], ['One Rep Max', 'one'], ['Best Set Volume', 'best_set'], ['Session Volume', 'volume']];
+const RANGES: [string, number][] = [['3 months', 92], ['Year', 366], ['All time', 0]];
 const PR_NAME: Record<PrKind, string> = { weight: 'Weight', '1rm': '1RM', volume: 'Volume' };
 const LETTER: Record<string, string> = { warmup: 'W', drop: 'D', failure: 'F' };
 
@@ -44,6 +47,7 @@ export default function ExerciseDetail() {
   const u = settings.unit;
   const [tab, setTab] = useState(0);
   const [metric, setMetric] = useState(0);
+  const [range, setRange] = useState(1);
   const ex = exercise(id);
   if (!ex) return <View style={{ flex: 1, backgroundColor: C.bg }}><Empty icon="close" title="Exercise not found" body="It may have been removed." /></View>;
 
@@ -58,10 +62,21 @@ export default function ExerciseDetail() {
 
   const summary = () => {
     const r = records(ex.id);
-    if (!r.sessions) return <Empty icon="stats-chart-outline" title="No history yet" body="Log this exercise in a workout and your progress and records appear here." />;
-    const series = r.series.slice(-12);
+    if (!r.series.length) return <Empty icon="stats-chart-outline" title="No history yet" body="Log this exercise in a workout and your progress and records appear here." />;
     const key = METRICS[metric][1];
-    const last = series[series.length - 1];
+    const days = RANGES[range][1];
+    const inRange = r.series.filter((p) => !days || p.t >= Date.now() - days * 86400000);
+    // Up to 30 points: with more sessions than that, keep the best of each equal slice so peaks survive.
+    const size = Math.ceil(inRange.length / 30) || 1;
+    const series = inRange.length <= 30 ? inRange : Array.from({ length: Math.ceil(inRange.length / size) }, (_, i) => inRange.slice(i * size, (i + 1) * size).reduce((a, p) => (p[key] >= a[key] ? p : a)));
+    const last = r.series[r.series.length - 1];
+    const first = series[0];
+    const change = first && first[key] > 0 && series.length > 1 ? Math.round(((series[series.length - 1][key] - first[key]) / first[key]) * 100) : null;
+    const status = liftStatus().find((l) => l.id === ex.id);
+    const next = suggest(ex.id, '');
+    const read = isAssisted(ex.id) ? 'Assisted lift: the weight is the help you get, so less is progress. Records and targets are not scored for it yet.'
+      : [change !== null && `${change >= 0 ? 'Up' : 'Down'} ${Math.abs(change)}% over ${RANGES[range][0] === 'All time' ? 'all time' : `the last ${RANGES[range][0].toLowerCase()}`}.`, status && status.status !== 'up' && (status.status === 'stalled' ? 'No new best in your last 3 sessions.' : 'Slipping from your best.'), next && `Next: ${next.next}.`].filter(Boolean).join(' ');
+    const reset = recordReset(ex.id);
     const rec = (name: string, value: string) => (
       <View key={name}>
         <Row style={{ minHeight: 44 }}><Txt style={{ flex: 1 }}>{name}</Txt><Txt color={C.accent}>{value}</Txt></Row>
@@ -74,13 +89,17 @@ export default function ExerciseDetail() {
         <Chart
           bars={false}
           values={series.map((p) => fromKg(p[key], u))}
-          labels={series.map((p, i) => (series.length <= 6 || i % 2 === (series.length - 1) % 2 ? fmtDay(p.t) : ''))}
+          labels={series.map((p, i) => (series.length <= 5 || i % Math.ceil(series.length / 5) === 0 ? fmtDay(p.t) : ''))}
           yFormat={(v) => `${thousands(v)} ${u}`}
         />
+        {series.length < 2 && <Txt size={13} color={C.muted}>Not enough sessions in this range to draw a line.</Txt>}
+        <Row gap={8}>{RANGES.map(([title], i) => <Chip key={title} title={title} selected={i === range} onPress={() => setRange(i)} />)}</Row>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {METRICS.map(([title], i) => <Chip key={title} title={title} selected={i === metric} onPress={() => setMetric(i)} />)}
         </ScrollView>
+        {!!read && <View style={{ backgroundColor: C.card, borderRadius: 12, padding: 12, flexDirection: 'row', gap: 10 }}><Icon name="fitness-outline" size={18} color={C.accent} /><Txt size={14} style={{ flex: 1 }}>{read}</Txt></View>}
         <Row gap={8} style={{ marginTop: 6 }}><Icon name="ribbon" size={20} color={C.warm} /><Txt size={18} bold>Personal Records</Txt></Row>
+        {!!reset && <Txt size={13} color={C.muted}>Counting from {fmtDate(reset)}, when you reset them.</Txt>}
         <View>
           {rec('Heaviest Weight', `${fmtWeight(r.heaviest_kg, u)}${u}`)}
           {rec('Best 1RM', `${fmtWeight(r.best_1rm_kg, u)}${u}`)}
@@ -124,7 +143,7 @@ export default function ExerciseDetail() {
               <Row key={i} gap={0} style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: i % 2 ? C.card : 'transparent' }}>
                 <Txt size={17} bold center color={s.set_type === 'warmup' ? C.warm : C.text} style={{ width: 56 }}>{LETTER[s.set_type] ?? number}</Txt>
                 <View style={{ flex: 1, gap: 2 }}>
-                  <Txt size={17}>{fmtWeight(s.weight_kg, u)} {u} x {s.reps}{s.rpe ? `   @ ${trimNum(s.rpe, 1)} RPE` : ''}</Txt>
+                  <Txt size={17}>{s.seconds ? `${s.seconds}s${s.weight_kg ? ` · ${fmtWeight(s.weight_kg, u)} ${u}` : ''}` : `${fmtWeight(s.weight_kg, u)} ${u} x ${s.reps}`}{s.rpe ? `   @ ${trimNum(s.rpe, 1)} RPE` : ''}</Txt>
                   {s.prs?.length > 0 && <Row gap={6}><Icon name="ribbon" size={15} color={C.warm} /><Txt size={13} color={C.muted}>{s.prs.map((p) => PR_NAME[p]).join(', ')}</Txt></Row>}
                 </View>
               </Row>
@@ -135,9 +154,19 @@ export default function ExerciseDetail() {
     });
   };
 
+  const options = async () => {
+    const reset = recordReset(ex.id);
+    const i = await menu(ex.name, [{ label: 'Reset personal records', icon: 'refresh-outline' }, ...(reset ? [{ label: 'Undo the reset', icon: 'arrow-undo-outline' as const }] : [])]);
+    if (i === 0 && (await confirm('Reset personal records?', 'Your bests for this exercise start again from today. Useful after a layoff or a change of machine. Your history stays, and you can undo this.', 'Reset'))) {
+      resetRecords(ex.id);
+      toast('Records reset');
+    }
+    if (i === 1) { resetRecords(ex.id, false); toast('Reset undone'); }
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <Stack.Screen options={{ title: ex.name }} />
+      <Stack.Screen options={{ title: ex.name, headerRight: () => <IconBtn name="ellipsis-horizontal" label="Exercise options" onPress={options} /> }} />
       <View style={{ flexDirection: 'row', backgroundColor: C.bar }}>
         {TABS.map((t, i) => (
           <Pressable key={t} accessibilityRole="tab" accessibilityLabel={t} accessibilityState={{ selected: i === tab }} onPress={() => setTab(i)}

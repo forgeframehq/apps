@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { fmtClock, fmtVolume, fmtWeight, newId, plural, trimNum } from '@/lib/format';
+import { unusual } from '@/lib/coach';
+import { fmtClock, fmtVolume, fmtWeight, newId, plural, trimNum, toKg } from '@/lib/format';
 import { setPickHandler } from '@/lib/pick';
 import { cancelRestAlert, scheduleRestAlert } from '@/lib/rest';
 import { activeTotals, addExercise, discardWorkout, finishWorkout, touch, useStore, workoutRecords } from '@/lib/store';
@@ -91,7 +92,7 @@ export default function Session() {
   }, [active, router]);
   if (!active) return null;
 
-  const toggleDone = (ex: ActiveExercise, i: number) => {
+  const toggleDone = async (ex: ActiveExercise, i: number) => {
     const set = ex.sets[i];
     if (set.done) {
       set.done = false;
@@ -103,6 +104,9 @@ export default function Session() {
     const weight = set.weight || (prev ? fmtWeight(prev.weight_kg, u) : above?.weight) || '0';
     const reps = set.reps || (prev ? String(prev.reps) : above?.reps) || '';
     if (!(parseInt(reps, 10) > 0)) return void alertBox('Enter reps', 'Add the reps for this set before ticking it off.');
+    // Catch slips like 153 for 15 before they become a permanent "record".
+    const odd = settings.check_entries === false ? '' : unusual(ex.exercise_id, toKg(parseFloat(weight.replace(',', '.')) || 0, u), parseInt(reps, 10));
+    if (odd && !(await confirm('Is that right?', `${weight} ${u} x ${reps}: ${odd}`, 'Yes, save it', { cancelText: 'Fix it' }))) return;
     Object.assign(set, { weight, reps, done: true });
     touch();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});

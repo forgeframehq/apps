@@ -10,7 +10,7 @@ import { MiniBar } from '@/ui/minibar';
 import { prompt } from '@/ui/overlay';
 
 const METRICS = ['Duration', 'Volume', 'Reps'];
-const TILES: [string, IconName, string][] = [['Statistics', 'stats-chart-outline', '/statistics'], ['Exercises', 'barbell-outline', '/exercises'], ['Calendar', 'calendar-outline', '/calendar'], ['Settings', 'settings-outline', '/settings']];
+const TILES: [string, IconName, string][] = [['Statistics', 'stats-chart-outline', '/statistics'], ['Exercises', 'barbell-outline', '/exercises'], ['Measures', 'body-outline', '/measures'], ['Calendar', 'calendar-outline', '/calendar']];
 
 /** Profile tab: weekly training chart, dashboard shortcuts and recent workouts. */
 export default function Profile() {
@@ -33,6 +33,7 @@ export default function Profile() {
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <TabHeader title="Profile">
         <IconBtn name="pencil" label="Edit name" onPress={rename} />
+        <IconBtn name="settings-outline" label="Settings" onPress={() => router.push('/settings')} />
       </TabHeader>
       <Page>
         <Row gap={18}>

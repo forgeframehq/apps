@@ -54,3 +54,15 @@ Newest first. One entry per thing that cost real time. Say what happened, why, a
 - **Give the assistant one "briefing" tool.** `get_coach_briefing` returns recent workouts, a 30-day summary and routines in one call, so the assistant does not need five calls before it can say anything useful.
 - **Compare a month in progress with the same number of days of the month before**, not the whole month, or every report on the 10th says you are down 60%.
 - **Expo adds permissions the app does not use** (draw over other apps, external storage). Remove them with `android.blockedPermissions` in `app.json` and check the built APK's manifest.
+
+## 2026-11-23 — Reps: themes, Hevy import, editing history
+
+- **Theme without a rewrite:** keep colours in one mutable object (`src/lib/theme.ts`), read it at render time (never inside `StyleSheet.create` or a module-level table), and put `key={accent}` on the root `Stack` so every screen remounts on a change. Text on the accent needs its own colour (`onAccent`): white on orange worked, white on volt green does not.
+- **Importing another app's export:** match exercise names by a normalised word set (order, punctuation, plural and "bicep/biceps" ignored). Never map to the "nearest" name: a wrong link corrupts history. Unmatched names become custom exercises under the user's own name with a muscle guessed from keywords.
+- **Deterministic ids for imported rows** (hash of start time + title) make a second import a no-op.
+- **An export has no routines.** Rebuild them from the latest run of each workout name used at least twice, and link old workouts to them, or the coach has nothing to compare.
+- **Recompute records in one chronological pass** after an import, an edit or a reset; the per-workout version is quadratic.
+- **Assisted lifts invert "heavier is better".** Leave them out of records, targets and trend arrows until they are modelled properly.
+- **Real data finds what seed data cannot:** 153-rep typos, a workout left running for 4 hours, one-off workout names, timed sets with no reps. Test with a real export (kept outside the repo), then write a made-up CSV for the automated test.
+- **A new native module** (`expo-document-picker`) means `npm install` at the version in `node_modules/expo/bundledNativeModules.json` and committing `package-lock.json`, because CI runs `npm ci`.
+- **Puppeteer and uppercase:** `Caption` upper-cases its text, so match rendered text case-insensitively.

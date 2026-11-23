@@ -1,5 +1,6 @@
 // All app data lives on the phone: library, routines, workouts, settings. Nothing here needs a network.
 // Connecting Claude (optional) mirrors the same data to a small server that Claude talks to; see sync.ts.
+import { applyAccent } from './theme';
 import { useSyncExternalStore } from 'react';
 
 import { EXERCISE_ART } from '@/data/art';
@@ -8,7 +9,7 @@ import { FRAMES, THUMBS } from '@/data/images';
 
 import { fromKg, isoNow, newId, toKg } from './format';
 import { readJson, removeJson, writeJson } from './storage';
-import type { ActiveExercise, ActiveSet, ActiveWorkout, Checkin, Exercise, Link, LoggedSet, PrKind, Routine, Settings, Tombstone, Unit, Workout } from './types';
+import type { ActiveExercise, ActiveSet, ActiveWorkout, Checkin, Exercise, Link, LoggedSet, Measure, PrKind, Routine, Settings, Tombstone, Unit, Workout } from './types';
 
 export const emptyLink = (): Link => ({ base_url: '', token: '', cursor: '', last_sync: 0, error: '', push_unit: false });
 
@@ -17,6 +18,7 @@ export const db = {
   settings: { name: '', unit: 'lb', folders: [] } as Settings,
   link: emptyLink(),
   customExercises: [] as Exercise[],
+  measures: [] as Measure[], // newest first
   routines: [] as Routine[],
   workouts: [] as Workout[], // newest first
   deleted: [] as Tombstone[], // waiting to be removed from the server
@@ -55,7 +57,7 @@ export const onCommit = (fn: () => void) => { afterCommit = fn; };
 export function saveData() {
   writeJson('data', {
     settings: db.settings, link: db.link, customExercises: db.customExercises,
-    routines: db.routines, workouts: db.workouts, deleted: db.deleted,
+    routines: db.routines, workouts: db.workouts, deleted: db.deleted, measures: db.measures,
   });
 }
 export function commit() {
@@ -83,9 +85,10 @@ export async function load() {
   if (d && typeof d === 'object') {
     if (d.settings) Object.assign(db.settings, d.settings);
     if (d.link) Object.assign(db.link, d.link);
-    for (const k of ['customExercises', 'routines', 'workouts', 'deleted'] as const) if (Array.isArray(d[k])) (db as any)[k] = d[k];
+    for (const k of ['customExercises', 'routines', 'workouts', 'deleted', 'measures'] as const) if (Array.isArray(d[k])) (db as any)[k] = d[k];
   }
   db.active = (await readJson<ActiveWorkout>('active')) ?? null;
+  applyAccent(db.settings.accent);
   reindex();
   refreshNames();
   db.ready = true;
@@ -125,6 +128,39 @@ export function setUnit(u: Unit) {
   db.link.push_unit = true;
   commit();
 }
+export function setAccent(name: string) {
+  db.settings.accent = name;
+  applyAccent(name);
+  commit();
+}
+export function setSetting<K extends 'length_unit' | 'default_rest' | 'check_entries'>(key: K, value: Settings[K]) {
+  db.settings[key] = value;
+  commit();
+}
+/** Personal bests for this exercise count from now on. History stays. Pass false to undo. */
+export function resetRecords(exId: string, on = true) {
+  const map = { ...(db.settings.record_resets ?? {}) };
+  if (on) map[exId] = isoNow(); else delete map[exId];
+  db.settings.record_resets = map;
+  recomputeRecords();
+  commit();
+}
+export const recordReset = (exId: string) => db.settings.record_resets?.[exId] ?? '';
+/** Assisted lifts log the help, not the load, so more weight is not progress. They are left out of records and targets. */
+export const isAssisted = (exId: string) => /assisted/i.test(byId.get(exId)?.name ?? '');
+
+// ---------- body measurements ----------
+
+export function saveMeasure(m: Omit<Measure, 'id'> & { id?: string }) {
+  const item: Measure = { ...m, id: m.id || newId() };
+  db.measures = [item, ...db.measures.filter((x) => x.id !== item.id)].sort((a, b) => (a.date < b.date ? 1 : -1));
+  commit();
+}
+export function deleteMeasure(id: string) {
+  db.measures = db.measures.filter((m) => m.id !== id);
+  commit();
+}
+
 export function setName(name: string) {
   db.settings.name = name.trim();
   commit();
@@ -226,14 +262,17 @@ export interface Records {
 export function records(exId: string, skipWorkoutId = ''): Records {
   const r: Records = { sessions: 0, heaviest_kg: 0, best_1rm_kg: 0, best_set_kg: 0, best_set_reps: 0, best_set_volume_kg: 0, best_session_volume_kg: 0, set_records: [], series: [] };
   const byReps = new Map<number, number>();
+  const reset = recordReset(exId);
   for (const item of sessions(exId, skipWorkoutId).reverse()) { // oldest first, so the series reads left to right
     let heaviest = 0, one = 0, bestSet = 0, volume = 0;
+    const counts = !reset || item.workout.started_at >= reset; // sessions before a reset stay on the chart but hold no records
     for (const s of item.sets) {
       volume += s.weight_kg * s.reps;
       if (s.set_type === 'warmup' || s.reps <= 0) continue;
       heaviest = Math.max(heaviest, s.weight_kg);
       one = Math.max(one, e1rm(s.weight_kg, s.reps));
       bestSet = Math.max(bestSet, s.weight_kg * s.reps);
+      if (!counts) continue;
       if (s.weight_kg * s.reps > r.best_set_volume_kg) {
         r.best_set_volume_kg = s.weight_kg * s.reps;
         r.best_set_kg = s.weight_kg;
@@ -241,10 +280,12 @@ export function records(exId: string, skipWorkoutId = ''): Records {
       }
       if (s.weight_kg > 0 && s.weight_kg > (byReps.get(s.reps) ?? 0)) byReps.set(s.reps, s.weight_kg);
     }
-    r.sessions++;
-    r.heaviest_kg = Math.max(r.heaviest_kg, heaviest);
-    r.best_1rm_kg = Math.max(r.best_1rm_kg, one);
-    r.best_session_volume_kg = Math.max(r.best_session_volume_kg, volume);
+    if (counts) {
+      r.sessions++;
+      r.heaviest_kg = Math.max(r.heaviest_kg, heaviest);
+      r.best_1rm_kg = Math.max(r.best_1rm_kg, one);
+      r.best_session_volume_kg = Math.max(r.best_session_volume_kg, volume);
+    }
     r.series.push({ t: Date.parse(item.workout.started_at), heaviest, one, best_set: bestSet, volume });
   }
   r.set_records = [...byReps.entries()].sort((a, b) => a[0] - b[0]).map(([reps, kg]) => ({ reps, kg }));
@@ -255,6 +296,7 @@ export function records(exId: string, skipWorkoutId = ''): Records {
 export function markRecords(w: Workout) {
   for (const s of allSets(w)) s.prs = [];
   for (const exId of new Set(w.exercises.map((e) => e.exercise_id))) {
+    if (isAssisted(exId)) continue;
     const prior = records(exId, w.id);
     if (!prior.sessions) continue;
     const mine = w.exercises.filter((e) => e.exercise_id === exId).flatMap((e) => e.sets).filter((s) => s.set_type !== 'warmup' && s.reps > 0 && s.weight_kg > 0);
@@ -266,6 +308,44 @@ export function markRecords(w: Workout) {
     check('1rm', prior.best_1rm_kg, (s) => e1rm(s.weight_kg, s.reps));
     check('volume', prior.best_set_volume_kg, (s) => s.weight_kg * s.reps);
   }
+}
+
+/** Re-marks records across all history in one pass, oldest first. Used after an import, an edit or a reset. */
+export function recomputeRecords() {
+  const best = new Map<string, { w: number; one: number; vol: number }>();
+  const resets = db.settings.record_resets ?? {};
+  for (let i = db.workouts.length - 1; i >= 0; i--) {
+    const w = db.workouts[i];
+    const before = JSON.stringify(allSets(w).map((s) => s.prs ?? []));
+    for (const s of allSets(w)) s.prs = [];
+    for (const exId of new Set(w.exercises.map((e) => e.exercise_id))) {
+      if (isAssisted(exId)) continue;
+      const key = resets[exId] && w.started_at >= resets[exId] ? `${exId}|after` : exId;
+      if (resets[exId] && w.started_at < resets[exId]) continue;
+      const mine = w.exercises.filter((e) => e.exercise_id === exId).flatMap((e) => e.sets).filter((s) => s.set_type !== 'warmup' && s.reps > 0 && s.weight_kg > 0);
+      if (!mine.length) continue;
+      const prior = best.get(key);
+      const top = (value: (s: LoggedSet) => number) => mine.reduce((a, s) => (value(s) > value(a) ? s : a), mine[0]);
+      const tw = top((s) => s.weight_kg), t1 = top((s) => e1rm(s.weight_kg, s.reps)), tv = top((s) => s.weight_kg * s.reps);
+      if (prior) {
+        if (tw.weight_kg > prior.w + 1e-6) tw.prs.push('weight');
+        if (e1rm(t1.weight_kg, t1.reps) > prior.one + 1e-6) t1.prs.push('1rm');
+        if (tv.weight_kg * tv.reps > prior.vol + 1e-6) tv.prs.push('volume');
+      }
+      best.set(key, { w: Math.max(prior?.w ?? 0, tw.weight_kg), one: Math.max(prior?.one ?? 0, e1rm(t1.weight_kg, t1.reps)), vol: Math.max(prior?.vol ?? 0, tv.weight_kg * tv.reps) });
+    }
+    if (before !== JSON.stringify(allSets(w).map((s) => s.prs))) w.dirty = true;
+  }
+}
+/** Replaces the exercises of a finished workout (after an edit) and brings every record back in line. */
+export function updateWorkout(id: string, patch: Pick<Workout, 'name' | 'exercises' | 'started_at' | 'ended_at'>) {
+  const w = workout(id);
+  if (!w) return;
+  Object.assign(w, patch, { dirty: true });
+  w.exercises = w.exercises.filter((e) => e.sets.length);
+  db.workouts.sort((x, y) => (x.started_at < y.started_at ? 1 : -1));
+  recomputeRecords();
+  commit();
 }
 
 export function recentExerciseIds(limit = 8): string[] {
@@ -354,7 +434,7 @@ export function startWorkout(r?: Routine) {
 }
 export function addExercise(ex: Exercise) {
   if (!db.active) return;
-  db.active.exercises.push(activeItem(ex.id, ex.name, 0, '', '', Math.max(1, previousSets(ex.id).length)));
+  db.active.exercises.push(activeItem(ex.id, ex.name, db.settings.default_rest ?? 0, '', '', Math.max(1, previousSets(ex.id).length)));
   touch();
 }
 export function discardWorkout() {
@@ -405,7 +485,7 @@ export function finishWorkout(): Workout | null {
 
 export const isLinked = () => db.link.token !== '';
 export function exportBackup(): string {
-  return JSON.stringify({ app: 'Reps', exported_at: isoNow(), settings: db.settings, customExercises: db.customExercises, routines: db.routines, workouts: db.workouts });
+  return JSON.stringify({ app: 'Reps', exported_at: isoNow(), settings: db.settings, customExercises: db.customExercises, routines: db.routines, workouts: db.workouts, measures: db.measures });
 }
 /** Merges a backup (from Reps or ForgeLift) into what is already here. Returns how many workouts were added. */
 export function importBackup(text: string): number {
@@ -415,6 +495,8 @@ export function importBackup(text: string): number {
   for (const e of b.customExercises ?? b.custom_exercises ?? []) if (e?.id && !byId.has(e.id)) db.customExercises.push({ secondary: [], instructions: [], ...e, custom: true });
   for (const r of b.routines ?? []) if (r?.id && !routine(r.id)) db.routines.push({ ...r, dirty: true });
   for (const w of b.workouts) if (w?.id && !workout(w.id)) { db.workouts.push({ ...w, dirty: true }); added++; }
+  for (const m of b.measures ?? []) if (m?.id && !db.measures.some((x) => x.id === m.id)) db.measures.push(m);
+  db.measures.sort((x, y) => (x.date < y.date ? 1 : -1));
   db.workouts.sort((x, y) => (x.started_at < y.started_at ? 1 : -1));
   if (!db.settings.name && b.settings?.name) db.settings.name = b.settings.name;
   commit();

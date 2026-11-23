@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router/js-tabs';
 import type { ColorValue } from 'react-native';
 
+import { useStore } from '@/lib/store';
 import { C, type IconName } from '@/ui/kit';
 
 const icon = (name: IconName) =>
@@ -10,6 +11,7 @@ const icon = (name: IconName) =>
   };
 
 export default function TabsLayout() {
+  useStore(); // re-render when the theme changes
   return (
     <Tabs
       screenOptions={{

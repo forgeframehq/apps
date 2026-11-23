@@ -25,10 +25,11 @@ cd ../tests && ./run-e2e.sh                           # drives the app in a brow
 - **Local-first.** An app must work with no account and no network. Anything online (sync, an AI assistant) is optional and sits behind one clearly optional screen, not a main tab (in Reps: Coach tab → "Connect Claude").
 - **Expo APIs change between SDK versions.** Check the installed package's `.d.ts` in `node_modules` before using an Expo API; do not write it from memory.
 - **Every pressable has an `accessibilityLabel`.** The end-to-end test finds controls by label, and screen readers need it.
+- **Colours come from `src/lib/theme.ts`** and are read at render time (`C.accent`, with `C.onAccent` for anything drawn on it), so the in-app theme picker works. Do not copy them into module-level constants.
 - **No `Alert.alert`.** Use the promise-based dialogs in `src/ui/overlay.tsx` (`confirm`, `menu`, `pick`, `prompt`, `toast`); they also work in the browser test.
 - **Bundled images get numeric file names** (`t0001.webp`). Android turns asset paths into resource names and merges names that differ only in punctuation or case.
 - **Data:** weights are stored in kg and converted for display; timestamps are ISO UTC strings; ids are generated on the phone so things can be created offline and synced later.
-- **Secrets never go in the repo:** tokens, signing keys, `.dev.vars`.
+- **Secrets never go in the repo:** tokens, signing keys, `.dev.vars`. Nor does anyone's real data: test imports with a made-up file.
 - **Workflows** are named `<app>-<target>.yml` and filtered by path so one app's change does not rebuild another.
 
 ## Limits of a Claude session (so you do not rediscover them)

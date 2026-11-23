@@ -12,7 +12,7 @@ import { OverlayHost } from '@/ui/overlay';
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
-  const { ready } = useStore();
+  const { ready, settings } = useStore();
 
   useEffect(() => {
     let sub: { remove: () => void } | undefined;
@@ -29,7 +29,9 @@ export default function RootLayout() {
   return (
     <>
       <StatusBar style="light" />
+      {/* The key remounts every screen when the accent changes, so all of them pick up the new colour. */}
       <Stack
+        key={settings.accent ?? 'default'}
         screenOptions={{
           headerStyle: { backgroundColor: C.bar },
           headerTintColor: C.text,
@@ -49,6 +51,10 @@ export default function RootLayout() {
         <Stack.Screen name="calendar" options={{ title: 'Calendar' }} />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         <Stack.Screen name="report" options={{ title: 'Monthly report' }} />
+        <Stack.Screen name="measures" options={{ title: 'Measures' }} />
+        <Stack.Screen name="integrations" options={{ title: 'Integrations' }} />
+        <Stack.Screen name="import" options={{ title: 'Import from Hevy' }} />
+        <Stack.Screen name="edit-workout" options={{ title: 'Edit Workout' }} />
         <Stack.Screen name="assistant" options={{ title: 'Connect Claude' }} />
       </Stack>
       <OverlayHost />

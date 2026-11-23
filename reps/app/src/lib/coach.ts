@@ -1,7 +1,7 @@
 // The built-in coach. Everything here is worked out on the phone from your own history: no AI, no network.
 // It reviews the last session, suggests targets for the next one, and watches consistency and balance.
 import { cap, fmtDate, fmtMinutes, fmtVolume, fmtWeight, fromKg, MONTH_NAMES, plural, trimNum } from './format';
-import { db, e1rm, exercise, records, routine, sessions, setCoachHint, unit, weekly, workoutMinutes, workoutRecords, workoutVolumeKg } from './store';
+import { db, e1rm, exercise, isAssisted, records, routine, sessions, setCoachHint, unit, weekly, workoutMinutes, workoutRecords, workoutVolumeKg } from './store';
 import type { LoggedSet, Routine, Workout } from './types';
 
 export const FEEL = ['Rough', 'Hard', 'OK', 'Good', 'Great'];
@@ -32,6 +32,7 @@ export interface Suggestion { last: string; next: string; why: string }
  * Uses the heaviest weight from the last session and holds back if that session was a grind.
  */
 export function suggest(exId: string, targetReps: string): Suggestion | null {
+  if (isAssisted(exId)) return null;
   const lastSession = sessions(exId)[0];
   const sets = lastSession ? working(lastSession.sets) : [];
   if (!sets.length) return null;
@@ -70,7 +71,8 @@ export function review(w: Workout) {
     if (!now) continue;
     const a = now.weight_kg > 0 ? e1rm(now.weight_kg, now.reps) : now.reps;
     const b = was ? (was.weight_kg > 0 ? e1rm(was.weight_kg, was.reps) : was.reps) : a;
-    rows.push({ name: e.exercise_name, now: show(now), before: was ? show(was) : '', dir: a > b + 1e-6 ? 1 : a < b - 1e-6 ? -1 : 0 });
+    // Assisted lifts log the help, so a bigger number is not better; show them without a verdict.
+    rows.push({ name: e.exercise_name, now: show(now), before: was ? show(was) : '', dir: isAssisted(e.exercise_id) ? 0 : a > b + 1e-6 ? 1 : a < b - 1e-6 ? -1 : 0 });
   }
   const v = workoutVolumeKg(w);
   const pv = prev ? workoutVolumeKg(prev) : 0;
@@ -140,7 +142,7 @@ export function liftStatus(): LiftStatus[] {
   for (const w of db.workouts) {
     if (Date.parse(w.started_at) < Date.now() - 42 * DAY) break;
     for (const e of w.exercises) {
-      if (seen.has(e.exercise_id)) continue;
+      if (seen.has(e.exercise_id) || isAssisted(e.exercise_id)) continue;
       seen.add(e.exercise_id);
       const series = records(e.exercise_id).series.map((p) => p.one);
       if (series.length < 5) continue;
@@ -251,7 +253,7 @@ export function monthReport(offset = 0) {
     if (at < start.getTime()) break;
     if (at >= to) continue;
     for (const e of w.exercises) {
-      if (done.has(e.exercise_id)) continue;
+      if (done.has(e.exercise_id) || isAssisted(e.exercise_id)) continue;
       done.add(e.exercise_id);
       let best: LoggedSet | null = null, prior = 0;
       for (const sess of sessions(e.exercise_id)) {
@@ -322,4 +324,18 @@ export function shareText(w: Workout): string {
   if (w.notes) lines.push(`Notes: ${w.notes}`);
   lines.push('', 'How did this session look, and what should I change next time?');
   return lines.join('\n');
+}
+
+/**
+ * Says why a set looks like a slip, or '' if it looks fine. Compares with the most reps and heaviest weight
+ * ever logged for the exercise, so a real jump passes and a stray extra digit does not.
+ */
+export function unusual(exId: string, weightKg: number, reps: number): string {
+  const all = sessions(exId).flatMap((x) => x.sets).filter((x) => x.reps > 0);
+  if (all.length < 3) return reps > 100 ? `${reps} reps is a lot for one set.` : '';
+  const maxReps = Math.max(...all.map((x) => x.reps));
+  const maxKg = Math.max(...all.map((x) => x.weight_kg));
+  if (reps > Math.max(30, maxReps * 2)) return `the most reps you have logged here is ${maxReps}.`;
+  if (maxKg > 0 && weightKg > maxKg * 2 && !isAssisted(exId)) return `that is more than double your heaviest here (${fmtWeight(maxKg, unit())} ${unit()}).`;
+  return '';
 }

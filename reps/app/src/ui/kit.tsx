@@ -7,24 +7,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { initials } from '@/lib/format';
+import { C } from '@/lib/theme';
 import { thumb } from '@/lib/store';
 
-export const C = {
-  bg: '#000000',
-  bar: '#161618',
-  card: '#1C1C1F',
-  cardHi: '#2A2A2E',
-  border: '#2C2C31',
-  text: '#FFFFFF',
-  muted: '#8E8E96',
-  accent: '#FF6B2C',
-  accentDim: '#3B1D10',
-  warm: '#F5B83D',
-  good: '#2FBF71',
-  goodDim: '#0F2A1B',
-  bad: '#F0524F',
-  dark: '#0B0B0C',
-} as const;
+export { C };
 
 export type IconName = React.ComponentProps<typeof Ionicons>['name'];
 export const Icon = ({ name, size = 22, color = C.text }: { name: IconName; size?: number; color?: string }) => <Ionicons name={name} size={size} color={color} />;
@@ -40,21 +26,22 @@ export function Txt({ children, size = 16, color = C.text, bold, center, lines, 
 }
 
 type Kind = 'primary' | 'card' | 'ghost' | 'good' | 'danger' | 'text' | 'plain';
-const KIND: Record<Kind, { bg: string; fg: string }> = {
-  primary: { bg: C.accent, fg: C.text },
+// Read at render time so a theme change takes effect.
+const kindOf = (kind: Kind): { bg: string; fg: string } => ({
+  primary: { bg: C.accent, fg: C.onAccent },
   card: { bg: C.card, fg: C.text },
   ghost: { bg: C.cardHi, fg: C.text },
   good: { bg: C.good, fg: C.dark },
   danger: { bg: C.card, fg: C.bad },
   text: { bg: 'transparent', fg: C.accent },
   plain: { bg: 'transparent', fg: C.muted },
-};
+}[kind]);
 
 export function Btn({ title, onPress, kind = 'primary', icon, disabled, busy, left, height, color, style, testID }: {
   title: string; onPress?: () => void; kind?: Kind; icon?: IconName; disabled?: boolean; busy?: boolean;
   left?: boolean; height?: number; color?: string; style?: StyleProp<ViewStyle>; testID?: string;
 }) {
-  const k = KIND[kind];
+  const k = kindOf(kind);
   const fg = color ?? k.fg;
   const link = kind === 'text' || kind === 'plain';
   return (
@@ -100,7 +87,7 @@ export function Chip({ title, selected, onPress }: { title: string; selected?: b
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ selected }} onPress={onPress}
       style={({ pressed }) => [s.chip, { backgroundColor: selected ? C.accent : C.cardHi, opacity: pressed ? 0.7 : 1 }]}>
-      <Text style={{ color: C.text, fontSize: 14, fontWeight: '500' }}>{title}</Text>
+      <Text style={{ color: selected ? C.onAccent : C.text, fontSize: 14, fontWeight: '500' }}>{title}</Text>
     </Pressable>
   );
 }

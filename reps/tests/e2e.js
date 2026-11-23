@@ -81,7 +81,9 @@ function seed() {
   check(/Coach: \d+ lb/.test(t), 'coach target shown on each exercise');
   check(/\d+lb x \d+/.test(t), 'previous numbers from local history');
   check(await type('Set 1 weight', '250') && await type('Set 1 reps', '6') && await type('Set 2 weight', '400') && await type('Set 2 reps', '5'), 'type weight and reps');
-  check(await tap('Set 1 done') && await tap('Set 2 done') && await tap('Set 3 done'), 'tick three sets');
+  check(await tap('Set 1 done') && await tap('Set 2 done'), 'tick two sets');
+  check(await type('Set 3 reps', '153') && await tap('Set 3 done') && (await text()).includes('Is that right?'), 'a 153-rep slip is questioned'); await shot('04a-entry-check');
+  check(await tap('Fix it') && await type('Set 3 reps', '5') && await tap('Set 3 done'), 'fix the slip and tick the set');
   await shot('04-session-ticked');
   t = await text();
   check(t.includes('Rest 1:5') || t.includes('Rest 2:0'), 'rest timer started');
@@ -153,6 +155,40 @@ function seed() {
   await go('/coach'); await shot('25-coach-linked'); check((await text()).includes('Manage connection'), 'coach shows the assistant is connected');
   // restart persistence
   await go('/home'); await shot('26-home-after-restart'); check((await text()).includes('Told Claude'), 'data survives a restart');
+  // theme
+  await go('/settings'); check(await tap('Violet theme'), 'pick the Violet theme'); await sleep(600);
+  check((await data()).settings.accent === 'Violet', 'theme choice is saved'); await go('/'); await shot('27-violet-theme');
+  await go('/settings'); await tap('Volt theme'); await sleep(600); await go('/'); await shot('28-volt-theme');
+  // import from a Hevy-style export (made up here; never commit a real export)
+  const csv = ['"title","start_time","end_time","description","exercise_title","superset_id","exercise_notes","set_index","set_type","weight_lbs","reps","distance_km","duration_seconds","rpe"',
+    '"Zed Day","1 Mar 2025, 10:00","1 Mar 2025, 10:50","","Bench Press (Barbell)","","",0,"warmup",95,10,,,',
+    '"Zed Day","1 Mar 2025, 10:00","1 Mar 2025, 10:50","","Bench Press (Barbell)","","",1,"normal",100,8,,,',
+    '"Zed Day","1 Mar 2025, 10:00","1 Mar 2025, 10:50","","Zed Row (Old School Machine)","","felt, ""good""",0,"normal",90,153,,,',
+    '"Zed Day","1 Mar 2025, 10:00","1 Mar 2025, 10:50","","Plank","","",0,"normal",,,,60,',
+    '"Zed Day","8 Mar 2025, 10:00","8 Mar 2025, 10:45","","Zed Row (Old School Machine)","","",0,"dropset",100,12,,,'].join('\n');
+  const meas = '"date","weight_lbs","fat_percent","neck_cm","waist_cm"\n"14 Jan 2026, 00:00",181,,,\n"24 Feb 2026, 00:00",190,15.5,,84\n';
+  fs.writeFileSync(path.join(OUT, 'workout_data.csv'), csv); fs.writeFileSync(path.join(OUT, 'measurement_data.csv'), meas);
+  const before = (await data()).workouts.length;
+  await go('/import');
+  const [chooser] = await Promise.all([p.waitForFileChooser(), tap('Choose CSV files')]);
+  await chooser.accept([path.join(OUT, 'workout_data.csv'), path.join(OUT, 'measurement_data.csv')]); await sleep(2500); await shot('29-import-done');
+  t = await text(); d = await data();
+  const zed = d.workouts.filter((w) => w.name === 'Zed Day'); const zrow = d.customExercises.find((e) => e.name === 'Zed Row (Old School Machine)');
+  check(/2 workouts added/.test(t) && /2 entries added/.test(t) && d.workouts.length === before + 2, 'import adds the workouts and measurements');
+  check(zrow && zrow.muscle_group === 'middle back' && zed[1].exercises[0].exercise_id === ex('Bench Press (Barbell)').id, 'known exercises link to the library, unknown ones become custom with a guessed muscle');
+  check(Math.abs(zed[1].exercises[0].sets[1].weight_kg - 100 * 0.45359237) < 1e-6 && zed[1].exercises.some((e) => e.sets[0].seconds === 60) && zed[0].exercises[0].sets[0].set_type === 'drop' && /felt, "good"/.test(zed[1].notes), 'weights, timed sets, set types and notes come across');
+  check(zed[0].exercises[0].sets[0].prs.includes('weight') && Math.abs(d.measures[0].weight_kg - 190 * 0.45359237) < 1e-6 && d.measures[0].parts.waist === 84, 'records recalculated and measurements stored');
+  // edit a workout: fix the 153
+  await go('/edit-workout?id=' + zed[1].id); await shot('30-edit-workout');
+  check(await type('Zed Row (Old School Machine) set 1 reps', '15') && await tap('Save changes'), 'edit a set'); await sleep(700);
+  d = await data(); const fixed = d.workouts.find((w) => w.id === zed[1].id).exercises.find((e) => e.exercise_id === zrow.id).sets[0];
+  check(fixed.reps === 15 && Math.abs(fixed.weight_kg - 90 * 0.45359237) < 1e-6, 'edit is saved without disturbing the weight');
+  await go('/history/' + zed[1].id); await shot('31-workout-detail'); check((await text()).includes('Muscle split'), 'workout detail shows the muscle split');
+  await go('/exercise/' + encodeURIComponent(zrow.id)); await shot('32-exercise'); t = await text(); check(t.includes('All time') && t.includes('Personal Records'), 'exercise screen has time ranges and records');
+  check(await tap('Exercise options') && await tap('Reset personal records') && await tap('Reset'), 'reset records'); await sleep(500);
+  check(!!((await data()).settings.record_resets || {})[zrow.id] && (await text()).includes('Counting from'), 'records restart from the reset');
+  await go('/measures'); await shot('33-measures'); check((await text()).includes('190 lb'), 'measures screen shows the imported weight');
+  await go('/integrations'); await shot('34-integrations'); check((await text()).includes('Health Connect'), 'integrations page');
   console.log('page errors:', errs.filter((e) => !/favicon|shadow\*|pointerEvents|useNativeDriver/.test(e)).slice(0, 6));
   console.log('FAILS:', fails);
   await b.close();
