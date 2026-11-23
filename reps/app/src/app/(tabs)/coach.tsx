@@ -2,11 +2,11 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 
-import { ENERGY, FEEL, review, suggest, upNext, watchList, week } from '@/lib/coach';
-import { fmtRelative, plural } from '@/lib/format';
+import { deload, ENERGY, FEEL, monthReport, review, suggest, upNext, watchList, week } from '@/lib/coach';
+import { fmtRelative, fmtVolume, plural } from '@/lib/format';
 import { isLinked, saveCheckin, startWorkout, useStore, workoutRecords } from '@/lib/store';
 import type { Workout } from '@/lib/types';
-import { Btn, C, Caption, Card, Chip, Empty, Icon, Page, Row, TabHeader, Txt } from '@/ui/kit';
+import { Btn, C, Caption, Card, Chip, Empty, Icon, Page, Row, TabHeader, TapCard, Txt } from '@/ui/kit';
 import { MiniBar } from '@/ui/minibar';
 import { confirm, prompt, toast } from '@/ui/overlay';
 
@@ -39,7 +39,7 @@ function CheckIn({ workout }: { workout: Workout }) {
 /** Coach tab: check in after a session, see what changed, and get targets for the next one. */
 export default function Coach() {
   const router = useRouter();
-  const { workouts, active } = useStore();
+  const { workouts, active, settings } = useStore();
   const last = workouts[0];
   const next = upNext();
   const linked = isLinked();
@@ -103,6 +103,8 @@ export default function Coach() {
 
   const wk = week();
   const watch = workouts.length ? watchList() : [];
+  const month = monthReport();
+  const rest = workouts.length ? deload() : { suggest: false, reasons: [] };
 
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
@@ -110,6 +112,13 @@ export default function Coach() {
       <Page>
         {!last && <Empty icon="fitness-outline" title="Your coach starts after your first workout" body="Log a session and this tab reviews it, suggests weights for next time and keeps an eye on your week." />}
         {last && !last.checkin && <CheckIn workout={last} />}
+        {rest.suggest && (
+          <Card style={{ borderWidth: 1, borderColor: C.warm }}>
+            <Caption>Time for a lighter week</Caption>
+            {rest.reasons.map((x) => <Txt key={x} size={15}>{x}</Txt>)}
+            <Txt size={14} color={C.muted}>Keep the same exercises, cut your sets by about a third and stop each set a few reps short.</Txt>
+          </Card>
+        )}
         {last && lastCard()}
         {nextCard()}
         {last && (
@@ -124,14 +133,22 @@ export default function Coach() {
             {watch.map((line) => <Row key={line} gap={10} style={{ alignItems: 'flex-start' }}><Icon name="alert-circle-outline" size={18} color={C.warm} /><Txt size={15} style={{ flex: 1 }}>{line}</Txt></Row>)}
           </Card>
         )}
+        {last && (
+          <TapCard label="Open monthly report" onPress={() => router.push('/report')}>
+            <Row><View style={{ flex: 1 }}><Caption>{month.title}</Caption></View><Icon name="chevron-forward" size={18} color={C.muted} /></Row>
+            <Txt size={17} bold>{plural(month.workouts.now, 'workout')} · {fmtVolume(month.volume.now, settings.unit)} · {plural(month.records.now, 'record')}</Txt>
+            {month.notes.slice(0, 2).map((n) => <Txt key={n} size={14} color={C.muted}>{n}</Txt>)}
+            <Txt size={14} color={C.accent}>See the full report and muscle balance</Txt>
+          </TapCard>
+        )}
         <Card>
-          <Caption>AI coach (optional)</Caption>
+          <Caption>Claude (optional)</Caption>
           <Txt size={15} color={C.muted}>
             {linked
-              ? 'Connected. Your workouts and check-ins are shared with your assistant, so you can talk through your training there.'
-              : 'Everything above works on this phone with no account. Connect Claude, ChatGPT or Gemini if you also want an assistant that can read your history, write routines and log workouts.'}
+              ? 'Connected. Open Claude and ask about your training: it reads your workouts and check-ins from Reps and can save routines back here.'
+              : 'Everything above works on this phone with no account. Connect Claude if you also want to talk your training through: it reads your workouts from Reps, suggests changes and saves routines back here.'}
           </Txt>
-          <Btn title={linked ? 'Manage connection' : 'Connect an assistant'} kind="ghost" icon="sparkles-outline" onPress={() => router.push('/assistant')} />
+          <Btn title={linked ? 'Manage connection' : 'Connect Claude'} kind="ghost" icon="sparkles-outline" onPress={() => router.push('/assistant')} />
         </Card>
       </Page>
       <MiniBar />

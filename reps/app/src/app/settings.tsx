@@ -39,9 +39,9 @@ export default function Settings() {
         <Btn title="Restore from a backup" kind="ghost" icon="download-outline" onPress={restore} />
       </Card>
       <Card>
-        <Caption>AI coach</Caption>
-        <Txt size={15}>{isLinked() ? 'An assistant is connected.' : 'Optional: connect Claude, ChatGPT or Gemini to coach, plan and log for you.'}</Txt>
-        <Btn title={isLinked() ? 'Manage connection' : 'Connect an assistant'} kind="ghost" icon="sparkles-outline" onPress={() => router.push('/assistant')} />
+        <Caption>Claude</Caption>
+        <Txt size={15}>{isLinked() ? 'Claude is connected.' : 'Optional: connect Claude to talk through your training and save routines here.'}</Txt>
+        <Btn title={isLinked() ? 'Manage connection' : 'Connect Claude'} kind="ghost" icon="sparkles-outline" onPress={() => router.push('/assistant')} />
       </Card>
       <Card style={{ gap: 6 }}>
         <Caption>About</Caption>

@@ -45,3 +45,12 @@ Newest first. One entry per thing that cost real time. Say what happened, why, a
 - **One MCP server serves Claude, ChatGPT and Gemini.** All three accept a custom remote MCP address, so there is one connector address and three sets of instructions, not three integrations. ChatGPT and Gemini are untested here and have plan/region limits; say so in the app.
 - **New per-workout data without a schema change:** the check-in is stored on the phone as its own field and appended to the workout notes when uploaded (`notesWithCheckin` in `sync.ts`), so the server and the assistant see it with no backend change.
 - **Renaming a route:** grep for the old path in `router.push`, the root `Stack.Screen` names, and the e2e test; TypeScript does not catch a stale route string.
+
+## 2026-11-23 — Reps: offline coach and the Reps-branded connector
+
+- **"AI" features that are really arithmetic should stay arithmetic.** The monthly report, muscle balance, plateau and deload detection are plain rules over local history (`src/lib/coach.ts`). Free, offline, instant, and testable. Save a real model for conversation.
+- **A Claude subscription cannot power chat inside our app.** Chat in-app means an API key billed per message. The free route is the connector: the user talks in the Claude app and our server only supplies data and actions. Claude's free plan allows one custom connector (checked 2026-11-23).
+- **Branding a custom connector without directory approval:** `serverInfo.title`, the `instructions` string returned by `initialize` (this is where the coaching behaviour lives), tool titles, and MCP `prompts` as conversation starters. A logo and one-tap connect need a directory listing, which needs real sign-in (OAuth) on the server.
+- **Give the assistant one "briefing" tool.** `get_coach_briefing` returns recent workouts, a 30-day summary and routines in one call, so the assistant does not need five calls before it can say anything useful.
+- **Compare a month in progress with the same number of days of the month before**, not the whole month, or every report on the 10th says you are down 60%.
+- **Expo adds permissions the app does not use** (draw over other apps, external storage). Remove them with `android.blockedPermissions` in `app.json` and check the built APK's manifest.

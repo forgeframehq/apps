@@ -1,9 +1,12 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import { Share, View } from 'react-native';
+
+import { shareText } from '@/lib/coach';
 
 import { fmtDate, fmtMinutes, fmtVolume, fmtWeight, trimNum } from '@/lib/format';
 import { deleteWorkout, saveRoutine, useStore, workout, workoutMinutes, workoutRecords, workoutSetCount, workoutVolumeKg } from '@/lib/store';
-import { Avatar, C, Empty, Icon, IconBtn, Page, Row, Stat, TapCard, Txt } from '@/ui/kit';
+import { Avatar, Btn, C, Empty, Icon, IconBtn, Page, Row, Stat, TapCard, Txt } from '@/ui/kit';
 import { confirm, menu, toast } from '@/ui/overlay';
 
 const LETTER: Record<string, string> = { warmup: 'W', drop: 'D', failure: 'F' };
@@ -18,6 +21,11 @@ export default function WorkoutDetail() {
   if (!w) return <View style={{ flex: 1, backgroundColor: C.bg }}><Empty icon="close" title="Workout not found" body="It may have been deleted." /></View>;
   const records = workoutRecords(w);
 
+  // Hands the workout to any app as text (Claude, ChatGPT, Messages). Falls back to the clipboard where sharing is unavailable.
+  const share = async () => {
+    const message = shareText(w);
+    try { await Share.share({ message }); } catch { await Clipboard.setStringAsync(message); toast('Workout copied'); }
+  };
   const options = async () => {
     const i = await menu(w.name, [{ label: 'Save as routine', icon: 'clipboard-outline' }, { label: 'Delete workout', icon: 'trash-outline', danger: true }]);
     if (i === 0) {
@@ -49,6 +57,7 @@ export default function WorkoutDetail() {
           {records > 0 && <Stat title="Records" value={String(records)} medal />}
         </Row>
         {!!w.notes && <Txt size={15} color={C.muted}>{w.notes}</Txt>}
+        <Btn title="Share to an assistant" kind="ghost" icon="share-outline" onPress={share} />
         {w.exercises.map((e, k) => {
           let number = 0;
           return (

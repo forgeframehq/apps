@@ -10,11 +10,11 @@ import { alertBox, confirm, toast } from '@/ui/overlay';
 
 // All three assistants can add an outside tool by its address, so one connection serves any of them.
 const ASSISTANTS = [
-  { name: 'Claude', steps: '1. Copy your connector address.\n2. In Claude, open connector settings and add a custom connector.\n3. Paste the address and save.', note: '' },
+  { name: 'Claude', steps: '1. Copy your connector address.\n2. Open claude.ai, go to Customize, then Connectors, and choose Add, then Add custom connector.\n3. Name it Reps, paste the address and add it.\n4. In any chat, turn Reps on and ask about your training.', note: "Works on Claude's free plan, which allows one custom connector." },
   { name: 'ChatGPT', steps: '1. Copy your connector address.\n2. In ChatGPT, open Settings, then Apps & Connectors, and add a custom connector (it may sit behind Developer mode).\n3. Paste the address, choose no authentication, and save.', note: 'Custom connectors need a paid ChatGPT plan, and some plans can read but not write.' },
   { name: 'Gemini', steps: '1. Copy your connector address.\n2. In Gemini, open Settings, then Connected Apps, and add a custom app.\n3. Paste the address and approve.', note: 'Google limits custom apps by region and account type, so the option may not appear for you.' },
 ];
-const IDEAS = ['"Build me a 4-day upper/lower split and save it to Reps."', '"I just did bench 185 for 3 sets of 5. Log it."', '"Look at my last month and tell me what to change."'];
+const IDEAS = ['"Review my last workout."', '"What should I lift next session?"', '"Which muscles am I neglecting?"', '"Give me alternatives to bench press and update my routine."', '"Plan my next week and save it to Reps."'];
 
 /** Optional: connect the app to your Reps server so an AI assistant can read and write your training data. */
 export default function Assistant() {
@@ -40,8 +40,8 @@ export default function Assistant() {
       <Page>
         <Card style={{ gap: 8 }}>
           <Icon name="sparkles" size={28} color={C.accent} />
-          <Txt size={19} bold>Connect an assistant (optional)</Txt>
-          <Txt size={15} color={C.muted}>Reps keeps everything on this phone and needs no account. Connect it to your Reps server and Claude, ChatGPT or Gemini can read your training history and check-ins, write routines into the app and log workouts you describe.</Txt>
+          <Txt size={19} bold>Connect Claude (optional)</Txt>
+          <Txt size={15} color={C.muted}>Reps keeps everything on this phone and needs no account. Connect it to your Reps server and Claude becomes your Reps coach: it reads your workouts and check-ins, suggests targets and alternatives, and saves routines back into the app. The conversation happens in the Claude app, so it costs nothing extra here.</Txt>
         </Card>
         <View style={{ gap: 6 }}>
           <Caption>Server address</Caption>
@@ -84,12 +84,12 @@ export default function Assistant() {
         <Btn title="Sync now" kind="ghost" icon="sync" disabled={syncing} onPress={sync} />
       </Card>
       <Card>
-        <Caption>Add Reps to your assistant</Caption>
+        <Caption>Add Reps to Claude</Caption>
         <Row gap={8}>{ASSISTANTS.map((x, i) => <Chip key={x.name} title={x.name} selected={i === which} onPress={() => setWhich(i)} />)}</Row>
         <Txt size={15}>{a.steps}</Txt>
-        {!!a.note && <Txt size={13} color={C.warm}>{a.note}</Txt>}
+        {!!a.note && <Txt size={13} color={which ? C.warm : C.muted}>{a.note}</Txt>}
         <Btn title="Copy connector address" icon="copy-outline" onPress={copy} />
-        <Txt size={13} color={C.muted}>The address contains your token, so treat it like a password. The same address works for all three.</Txt>
+        <Txt size={13} color={C.muted}>The address contains your token, so treat it like a password. The same address also works in ChatGPT and Gemini (not yet tested).</Txt>
       </Card>
       <Card style={{ gap: 6 }}>
         <Caption>Things to ask</Caption>

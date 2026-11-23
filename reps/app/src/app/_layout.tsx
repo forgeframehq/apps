@@ -48,7 +48,8 @@ export default function RootLayout() {
         <Stack.Screen name="statistics" options={{ title: 'Statistics' }} />
         <Stack.Screen name="calendar" options={{ title: 'Calendar' }} />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
-        <Stack.Screen name="assistant" options={{ title: 'AI coach' }} />
+        <Stack.Screen name="report" options={{ title: 'Monthly report' }} />
+        <Stack.Screen name="assistant" options={{ title: 'Connect Claude' }} />
       </Stack>
       <OverlayHost />
     </>

@@ -22,7 +22,7 @@ cd ../tests && ./run-e2e.sh                           # drives the app in a brow
 
 ## Conventions
 
-- **Local-first.** An app must work with no account and no network. Anything online (sync, an AI assistant) is optional and sits behind one clearly optional screen, not a main tab (in Reps: Coach tab → "Connect an assistant").
+- **Local-first.** An app must work with no account and no network. Anything online (sync, an AI assistant) is optional and sits behind one clearly optional screen, not a main tab (in Reps: Coach tab → "Connect Claude").
 - **Expo APIs change between SDK versions.** Check the installed package's `.d.ts` in `node_modules` before using an Expo API; do not write it from memory.
 - **Every pressable has an `accessibilityLabel`.** The end-to-end test finds controls by label, and screen readers need it.
 - **No `Alert.alert`.** Use the promise-based dialogs in `src/ui/overlay.tsx` (`confirm`, `menu`, `pick`, `prompt`, `toast`); they also work in the browser test.
@@ -40,4 +40,4 @@ cd ../tests && ./run-e2e.sh                           # drives the app in a brow
 
 ## Apps
 
-- `reps/` — workout tracker. Expo app in `reps/app`, Cloudflare Worker (REST + sync + Claude MCP connector) in `reps/backend`, exercise library builder in `reps/tools`, end-to-end test in `reps/tests`.
+- `reps/` — workout tracker. Expo app in `reps/app`, Cloudflare Worker (REST + sync + the Reps coach MCP connector) in `reps/backend`, exercise library builder in `reps/tools`, end-to-end test in `reps/tests`.

@@ -228,6 +228,43 @@ const TOOLS: Tool[] = [
     readOnly: true,
     run: (db, user, a) => data.stats(db, user.id, a?.days),
   },
+  {
+    name: 'get_coach_briefing',
+    title: 'Get coach briefing',
+    description: "Everything needed to coach in one call: the last 5 workouts set by set (the notes include the user's check-in: how it felt, energy, anything that hurt), a 30-day summary with sets per muscle group, and the saved routines. Call this first when the user asks about their training, progress or what to do next.",
+    inputSchema: { type: 'object', properties: {} },
+    readOnly: true,
+    run: async (db, user) => {
+      const recent = await data.listWorkouts(db, user.id, { limit: 5 });
+      return {
+        recent_workouts: await Promise.all((recent as any[]).map((w) => data.getWorkout(db, user.id, w.id))),
+        last_30_days: await data.stats(db, user.id, 30),
+        routines: await data.listRoutines(db, user.id),
+      };
+    },
+  },
+];
+
+// How Claude should behave when this connector is on. Sent once, when the connection opens.
+const coachInstructions = (user: User) => `You are connected to Reps, ${user.name}'s workout tracker, and act as their Reps coach. Everything they log in the Reps app is available through these tools.
+
+How to coach:
+- Start from their data, not general advice. Call get_coach_briefing before answering questions about training, progress or what to do next. Use get_exercise_history when one lift is the subject.
+- Workout notes may end with "Check-in: felt ..., energy ...". Read it: a Rough or Hard session, low energy or a mention of pain changes the advice.
+- Be specific. Give the next target as weight and reps for a named exercise ("Bench Press (Barbell): 190 ${user.unit} x 8"), based on what they last did. Add weight only once every set reaches the top of the rep range; hold or back off after a grind.
+- For alternatives, use list_exercises (filter by muscle_group) and suggest exercises from the Reps library by their exact names, so they can be added to a routine.
+- When they agree to a plan, save it with create_routine or update_routine so it appears in the app, and say that you did. When they tell you about a workout they did, log it with log_workout.
+- Ask before deleting anything.
+- Weights are in ${user.unit} unless a tool call says otherwise. Keep answers short enough to read between sets.
+- You are not a doctor. For pain that persists or sounds like an injury, suggest easing off that movement and seeing a professional.`;
+
+// Conversation starters the assistant app can offer under the Reps name.
+const PROMPTS = [
+  { name: 'review_last_workout', title: 'Review my last workout', description: 'What went well, what slipped, and targets for next time.', text: 'Review my last workout in Reps. Tell me what went well, what slipped compared with the time before, and give me a target weight and reps for each exercise next time.' },
+  { name: 'plan_next_week', title: 'Plan my next week', description: 'A week of sessions based on recent training, saved as routines.', text: 'Look at my last few weeks in Reps and plan my next week of training. Show me the plan first, then save it to Reps as routines once I agree.' },
+  { name: 'check_my_balance', title: 'Check my muscle balance', description: 'Which muscles are over- or under-trained this month.', text: 'Using my last 30 days in Reps, tell me which muscle groups I am overdoing or neglecting, and what to add or drop.' },
+  { name: 'swap_an_exercise', title: 'Swap an exercise', description: 'Alternatives from the Reps library for a lift.', text: 'I want to replace an exercise in one of my Reps routines. Ask me which one and why, then suggest three alternatives from the Reps library for the same muscle and update the routine with my pick.' },
+  { name: 'break_a_plateau', title: 'Break a plateau', description: 'Find lifts that have stalled and how to get them moving.', text: 'Check my Reps history for lifts that have stopped progressing and tell me how to get each one moving again.' },
 ];
 
 type Rpc = { jsonrpc?: string; id?: string | number | null; method?: string; params?: any };
@@ -244,13 +281,20 @@ async function handleOne(db: D1Database, user: User, msg: Rpc): Promise<object |
       const asked = msg.params?.protocolVersion;
       return ok({
         protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[1],
-        capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: 'reps', title: 'Reps', version: '1.0.0' },
-        instructions: `Reps is ${user.name}'s workout tracker. Weights are in ${user.unit} unless a tool call says otherwise. Use list_exercises to find exact exercise names before creating routines or logging workouts.`,
+        capabilities: { tools: { listChanged: false }, prompts: { listChanged: false } },
+        serverInfo: { name: 'reps', title: 'Reps', version: '1.1.0' },
+        instructions: coachInstructions(user),
       });
     }
     case 'ping':
       return ok({});
+    case 'prompts/list':
+      return ok({ prompts: PROMPTS.map(({ name, title, description }) => ({ name, title, description })) });
+    case 'prompts/get': {
+      const p = PROMPTS.find((x) => x.name === msg.params?.name);
+      if (!p) return err(-32602, `Unknown prompt: ${msg.params?.name}`);
+      return ok({ description: p.description, messages: [{ role: 'user', content: { type: 'text', text: p.text } }] });
+    }
     case 'tools/list':
       return ok({
         tools: TOOLS.map((t) => ({

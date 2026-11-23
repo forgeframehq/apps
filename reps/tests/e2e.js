@@ -101,6 +101,10 @@ function seed() {
   check(t.includes('Workout saved'), 'saved toast');
   check(await tap('Good') && await tap('High') && await tap('Save check-in'), 'answer the check-in'); await shot('12b-coach');
   check(((await data()).workouts[0].checkin || {}).feel === 4 && !(await text()).includes('How was'), 'check-in saved with the workout');
+  check(await tap('Open monthly report'), 'open monthly report'); await sleep(600); await shot('12d-report');
+  t = await text();
+  check(t.includes('WHAT STANDS OUT') && t.includes('MUSCLE BALANCE') && t.includes('PUSH / PULL / LEGS') && /Quadriceps/.test(t), 'monthly report shows takeaways, muscle balance and split');
+  check(await tap('Previous month') && !(await text()).includes('So far'), 'report steps back a month'); await shot('12e-report-previous');
   await go('/home'); await shot('12c-home-feed');
   let d = await data();
   check(d.workouts.length === 31 && d.workouts[0].exercises[0].sets.length === 3, 'workout saved on the device');
@@ -115,8 +119,8 @@ function seed() {
   check(await tap('Statistics'), 'Statistics'); await shot('18-statistics'); check((await text()).includes('Sets per muscle group'), 'statistics');
   await go('/calendar'); await shot('19-calendar'); check((await text()).includes('this month'), 'calendar');
   await go('/settings'); await shot('20-settings');
-  await go('/coach'); await shot('21-coach'); check((await text()).includes('AI COACH (OPTIONAL)'), 'coach tab offers the optional AI coach');
-  check(await tap('Connect an assistant'), 'open assistant setup'); await sleep(500); await shot('22-assistant-connect');
+  await go('/coach'); await shot('21-coach'); check((await text()).includes('CLAUDE (OPTIONAL)'), 'coach tab offers the optional AI coach');
+  check(await tap('Connect Claude'), 'open assistant setup'); await sleep(500); await shot('22-assistant-connect');
   check(await type('Server address', API) && await type('Token', token), 'enter server and token');
   check(await tap('Connect'), 'Connect'); await sleep(6000); await shot('23-assistant-connected');
   t = await text(); check(t.includes('CONNECTED') && t.includes('Synced'), 'connected and synced');
@@ -125,6 +129,14 @@ function seed() {
   check(remote.workouts.length === 31 && remote.routines.length === 4, `server has the phone's data (${remote.workouts.length} workouts, ${remote.routines.length} routines)`);
   d = await data(); check(!d.workouts.some((w) => w.dirty) && !d.routines.some((r) => r.dirty), 'nothing left to upload');
   const mine = await api('/api/workouts/' + d.workouts[0].id); check(/Check-in: felt Good, energy High/.test(mine.notes || ''), 'check-in reached the server for the assistant to read');
+  // the connector, as Claude sees it
+  const mcp = (method, params) => fetch(`${API}/mcp/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }).then((r) => r.json()).then((r) => r.result);
+  const init = await mcp('initialize', { protocolVersion: '2025-06-18' });
+  check(init.serverInfo.title === 'Reps' && /Reps coach/.test(init.instructions) && !!init.capabilities.prompts, 'connector introduces itself as the Reps coach');
+  const prompts = (await mcp('prompts/list')).prompts; const got = await mcp('prompts/get', { name: prompts[0].name });
+  check(prompts.length === 5 && /Reps/.test(got.messages[0].content.text), 'connector offers starter prompts');
+  const brief = JSON.parse((await mcp('tools/call', { name: 'get_coach_briefing', arguments: {} })).content[0].text);
+  check(brief.recent_workouts.length === 5 && /Check-in: felt Good/.test(brief.recent_workouts[0].notes || '') && brief.routines.length === 4 && brief.last_30_days.workouts > 0, 'coach briefing returns recent workouts with the check-in, stats and routines');
   // what Claude would do on the server
   const r1 = await api('/api/routines', 'POST', { name: 'Claude Upper', folder: 'From Claude', exercises: [{ exercise: 'Bench Press (Barbell)', sets: 4, reps: '6' }, { exercise: 'Landmine Twist Thing', muscle_group: 'abdominals' }] });
   const w1 = await api('/api/workouts', 'POST', { name: 'Told Claude', source: 'claude', duration_minutes: 40, exercises: [{ exercise: 'Squat (Barbell)', sets: [{ weight_kg: 200, reps: 3 }] }] });
